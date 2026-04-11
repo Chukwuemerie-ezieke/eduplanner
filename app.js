@@ -1,0 +1,599 @@
+/* ========================================
+   EduPlanner — App Logic
+   Harmony Digital Consults Ltd
+   Open Source | MIT License
+   ======================================== */
+
+(function () {
+  'use strict';
+
+  // ---------- Pre-populated tasks by role and frequency ----------
+  const DEFAULT_TASKS = {
+    teacher: {
+      daily: [
+        'Review lesson plan for today',
+        'Take class attendance',
+        'Update student progress notes',
+        'Mark and return assignments',
+        'Prepare materials for tomorrow\'s lessons',
+        'Supervise student behavior during break',
+        'Communicate updates to parents (if needed)'
+      ],
+      weekly: [
+        'Submit weekly lesson notes to HOD',
+        'Prepare and grade quizzes/tests',
+        'Review scheme of work progress',
+        'Attend staff meeting',
+        'Update class register and records',
+        'Plan differentiated activities for struggling students',
+        'Organize classroom and resources'
+      ],
+      monthly: [
+        'Submit monthly progress report',
+        'Review and adjust lesson plans for next month',
+        'Conduct parent-teacher communication',
+        'Participate in professional development session',
+        'Analyze student performance data',
+        'Update cumulative records'
+      ]
+    },
+    administrator: {
+      daily: [
+        'Review and respond to correspondence',
+        'Monitor staff attendance and punctuality',
+        'Handle student disciplinary issues',
+        'Coordinate daily school operations',
+        'Review financial transactions and petty cash',
+        'Update school calendar if needed'
+      ],
+      weekly: [
+        'Hold management team briefing',
+        'Review budget expenditure report',
+        'Monitor cleanliness and facility maintenance',
+        'Review admission and enrollment status',
+        'Coordinate extracurricular activities schedule',
+        'Approve purchase orders and requisitions'
+      ],
+      monthly: [
+        'Prepare monthly financial summary',
+        'Conduct staff performance review meeting',
+        'Submit regulatory compliance documents',
+        'Organize school assembly or special event',
+        'Review and update school policies',
+        'Generate enrollment and attendance reports'
+      ]
+    },
+    hod: {
+      daily: [
+        'Monitor teaching quality in department',
+        'Review lesson delivery and classroom visits',
+        'Address departmental issues promptly',
+        'Ensure teaching aids are available'
+      ],
+      weekly: [
+        'Hold departmental meeting',
+        'Review and sign off on lesson notes',
+        'Coordinate inter-class assessments',
+        'Mentor and support new teachers',
+        'Verify scheme of work compliance',
+        'Plan department resource needs'
+      ],
+      monthly: [
+        'Submit departmental performance report',
+        'Analyze subject-wide student results',
+        'Organize department training session',
+        'Review and update department curriculum',
+        'Evaluate resource utilization',
+        'Set targets for the next month'
+      ]
+    },
+    ict: {
+      daily: [
+        'Check all computer systems and devices',
+        'Resolve IT support tickets',
+        'Monitor internet connectivity',
+        'Ensure projectors and displays are working',
+        'Back up critical school data'
+      ],
+      weekly: [
+        'Run system and software updates',
+        'Conduct ICT training/support for staff',
+        'Audit device inventory',
+        'Test backup and recovery procedures',
+        'Review network security logs',
+        'Update school website or portal'
+      ],
+      monthly: [
+        'Submit IT infrastructure status report',
+        'Plan and procure technology supplies',
+        'Conduct cybersecurity awareness session',
+        'Review and update IT policies',
+        'Evaluate software license renewals',
+        'Prepare ICT integration plan for curriculum'
+      ]
+    },
+    librarian: {
+      daily: [
+        'Open and organize library for the day',
+        'Process book checkouts and returns',
+        'Assist students with research and reading',
+        'Shelve returned books properly',
+        'Monitor library behavior and rules'
+      ],
+      weekly: [
+        'Update library catalog and records',
+        'Conduct reading promotion activity',
+        'Check for overdue books and send reminders',
+        'Organize reading corner and displays',
+        'Coordinate with teachers on reference materials',
+        'Inventory new book arrivals'
+      ],
+      monthly: [
+        'Submit library usage statistics report',
+        'Recommend new book purchases',
+        'Organize book club or reading challenge',
+        'Conduct library orientation for new students',
+        'Review and repair damaged materials',
+        'Plan library events and theme months'
+      ]
+    },
+    counselor: {
+      daily: [
+        'Review student referral cases',
+        'Conduct individual counseling sessions',
+        'Follow up on at-risk students',
+        'Document session notes and progress',
+        'Coordinate with class teachers on concerns'
+      ],
+      weekly: [
+        'Facilitate group counseling session',
+        'Meet with parents of referred students',
+        'Conduct classroom guidance lesson',
+        'Review and update student case files',
+        'Coordinate with external support agencies',
+        'Attend student welfare meeting'
+      ],
+      monthly: [
+        'Submit counseling activity report',
+        'Organize wellness or life skills workshop',
+        'Analyze referral patterns and trends',
+        'Update counseling resources and materials',
+        'Conduct peer mediation training',
+        'Plan career guidance or orientation session'
+      ]
+    }
+  };
+
+  const ROLE_LABELS = {
+    teacher: 'Teacher',
+    administrator: 'Administrator',
+    hod: 'Head of Department',
+    ict: 'ICT Coordinator',
+    librarian: 'Librarian',
+    counselor: 'School Counselor'
+  };
+
+  // ---------- State ----------
+  let currentRole = 'teacher';
+  let currentFreq = 'daily';
+  let tasks = {}; // { role: [{ id, text, freq, done }] }
+
+  // ---------- DOM ----------
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  const taskList = $('#task-list');
+  const emptyState = $('#empty-state');
+  const addForm = $('#add-task-form');
+  const taskInput = $('#new-task-input');
+  const taskFreqSelect = $('#new-task-freq');
+  const progressFill = $('.progress-fill');
+  const statDone = $('#stat-done');
+  const statTotal = $('#stat-total');
+  const toastContainer = $('#toast-container');
+
+  // ---------- Local Storage ----------
+  function loadTasks() {
+    try {
+      const saved = localStorage.getItem('eduplanner_tasks');
+      if (saved) {
+        tasks = JSON.parse(saved);
+        return;
+      }
+    } catch (e) { /* ignore */ }
+    // Initialize with defaults
+    initDefaults();
+  }
+
+  function initDefaults() {
+    tasks = {};
+    for (const role of Object.keys(DEFAULT_TASKS)) {
+      tasks[role] = [];
+      for (const freq of ['daily', 'weekly', 'monthly']) {
+        const items = DEFAULT_TASKS[role][freq] || [];
+        items.forEach((text) => {
+          tasks[role].push({
+            id: uid(),
+            text,
+            freq,
+            done: false
+          });
+        });
+      }
+    }
+    saveTasks();
+  }
+
+  function saveTasks() {
+    try {
+      localStorage.setItem('eduplanner_tasks', JSON.stringify(tasks));
+    } catch (e) { /* ignore — storage might be full or blocked */ }
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // ---------- Render ----------
+  function getFilteredTasks() {
+    const roleTasks = tasks[currentRole] || [];
+    if (currentFreq === 'all') return roleTasks;
+    return roleTasks.filter(t => t.freq === currentFreq);
+  }
+
+  function renderTasks() {
+    const filtered = getFilteredTasks();
+    // Sort: incomplete first, then by original order
+    const sorted = [...filtered].sort((a, b) => a.done - b.done);
+
+    taskList.innerHTML = '';
+    if (sorted.length === 0) {
+      emptyState.style.display = 'flex';
+      taskList.style.display = 'none';
+    } else {
+      emptyState.style.display = 'none';
+      taskList.style.display = 'block';
+      sorted.forEach(task => {
+        taskList.appendChild(createTaskEl(task));
+      });
+    }
+    updateStats();
+  }
+
+  function createTaskEl(task) {
+    const div = document.createElement('div');
+    div.className = 'task-item' + (task.done ? ' done' : '');
+    div.setAttribute('role', 'listitem');
+    div.dataset.id = task.id;
+
+    div.innerHTML = `
+      <input type="checkbox" class="task-checkbox" ${task.done ? 'checked' : ''} aria-label="Mark task as ${task.done ? 'incomplete' : 'complete'}">
+      <div class="task-content">
+        <div class="task-text">${escHtml(task.text)}</div>
+        ${currentFreq === 'all' ? `<span class="task-freq-badge ${task.freq}">${task.freq}</span>` : ''}
+      </div>
+      <div class="task-actions">
+        <button class="task-delete" aria-label="Delete task" title="Delete task">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    `;
+
+    // Checkbox
+    const cb = div.querySelector('.task-checkbox');
+    cb.addEventListener('change', () => {
+      task.done = cb.checked;
+      saveTasks();
+      renderTasks();
+    });
+
+    // Delete
+    const delBtn = div.querySelector('.task-delete');
+    delBtn.addEventListener('click', () => {
+      const roleTasks = tasks[currentRole];
+      const idx = roleTasks.findIndex(t => t.id === task.id);
+      if (idx > -1) {
+        roleTasks.splice(idx, 1);
+        saveTasks();
+        renderTasks();
+        showToast('Task removed');
+      }
+    });
+
+    return div;
+  }
+
+  function updateStats() {
+    const filtered = getFilteredTasks();
+    const done = filtered.filter(t => t.done).length;
+    const total = filtered.length;
+    statDone.textContent = done;
+    statTotal.textContent = total;
+
+    const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+    progressFill.style.width = pct + '%';
+    $('#progress-bar').setAttribute('aria-valuenow', pct);
+  }
+
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ---------- Event Handlers ----------
+  // Role tabs
+  $$('.tab[data-role]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.tab[data-role]').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      currentRole = tab.dataset.role;
+      renderTasks();
+    });
+  });
+
+  // Frequency tabs
+  $$('.freq-tab[data-freq]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $$('.freq-tab[data-freq]').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      currentFreq = tab.dataset.freq;
+      taskFreqSelect.value = currentFreq === 'all' ? 'daily' : currentFreq;
+      renderTasks();
+    });
+  });
+
+  // Add task
+  addForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = taskInput.value.trim();
+    if (!text) return;
+
+    const freq = taskFreqSelect.value;
+    if (!tasks[currentRole]) tasks[currentRole] = [];
+    tasks[currentRole].push({
+      id: uid(),
+      text,
+      freq,
+      done: false
+    });
+    saveTasks();
+    taskInput.value = '';
+    // Switch freq view if needed
+    if (currentFreq !== 'all' && currentFreq !== freq) {
+      // Auto switch to the frequency of the added task
+      $$('.freq-tab[data-freq]').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      const target = $(`.freq-tab[data-freq="${freq}"]`);
+      if (target) {
+        target.classList.add('active');
+        target.setAttribute('aria-selected', 'true');
+      }
+      currentFreq = freq;
+    }
+    renderTasks();
+    showToast('Task added');
+  });
+
+  // Clear completed
+  $('#clear-done').addEventListener('click', () => {
+    if (!tasks[currentRole]) return;
+    const before = tasks[currentRole].length;
+    tasks[currentRole] = tasks[currentRole].filter(t => !t.done);
+    const removed = before - tasks[currentRole].length;
+    if (removed > 0) {
+      saveTasks();
+      renderTasks();
+      showToast(`Cleared ${removed} completed task${removed > 1 ? 's' : ''}`);
+    } else {
+      showToast('No completed tasks to clear');
+    }
+  });
+
+  // ---------- Export: PDF ----------
+  $('#export-pdf').addEventListener('click', () => {
+    const roleTasks = tasks[currentRole] || [];
+    if (roleTasks.length === 0) {
+      showToast('No tasks to export');
+      return;
+    }
+
+    const roleName = ROLE_LABELS[currentRole] || currentRole;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Build PDF using jsPDF-like manual approach with print
+    const printWin = window.open('', '_blank', 'width=800,height=600');
+    if (!printWin) {
+      showToast('Pop-up blocked. Please allow pop-ups.');
+      return;
+    }
+
+    const groupedHtml = buildGroupedHtml(roleTasks, roleName, dateStr);
+
+    printWin.document.write(`<!DOCTYPE html>
+<html><head><title>EduPlanner - ${roleName} Tasks</title>
+<style>
+  @import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'General Sans', sans-serif; padding: 40px; color: #1A2E1A; font-size: 13px; line-height: 1.5; }
+  .pdf-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #1B5E4B; }
+  .pdf-brand { font-size: 20px; font-weight: 700; color: #1B5E4B; }
+  .pdf-brand-sub { font-size: 11px; color: #5C6B5C; font-weight: 500; }
+  .pdf-meta { text-align: right; font-size: 12px; color: #5C6B5C; }
+  .pdf-role { font-size: 16px; font-weight: 700; color: #1A2E1A; margin-bottom: 4px; }
+  h2 { font-size: 14px; font-weight: 700; color: #1B5E4B; margin: 20px 0 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { text-align: left; padding: 6px 10px; background: #E6F2ED; color: #1B5E4B; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 7px 10px; border-bottom: 1px solid #DDD9D1; font-size: 13px; }
+  .status-done { color: #2D8654; font-weight: 600; }
+  .status-pending { color: #A07020; font-weight: 600; }
+  .pdf-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #DDD9D1; font-size: 10px; color: #9EA89E; text-align: center; }
+  @media print { body { padding: 20px; } }
+</style></head><body>
+  <div class="pdf-header">
+    <div>
+      <div class="pdf-brand">EduPlanner</div>
+      <div class="pdf-brand-sub">Harmony Digital Consults Ltd</div>
+    </div>
+    <div class="pdf-meta">
+      <div class="pdf-role">${roleName} Task Report</div>
+      <div>Generated: ${dateStr}</div>
+    </div>
+  </div>
+  ${groupedHtml}
+  <div class="pdf-footer">
+    EduPlanner by Harmony Digital Consults Ltd &middot; Open Source &middot; eduplanner.harmonyconsults.com
+  </div>
+  <script>window.onload = function() { window.print(); }<\/script>
+</body></html>`);
+    printWin.document.close();
+    showToast('PDF ready — use Print dialog to save');
+  });
+
+  function buildGroupedHtml(roleTasks, roleName, dateStr) {
+    let html = '';
+    ['daily', 'weekly', 'monthly'].forEach(freq => {
+      const items = roleTasks.filter(t => t.freq === freq);
+      if (items.length === 0) return;
+      html += `<h2>${freq} Tasks</h2>
+      <table>
+        <thead><tr><th style="width:5%">#</th><th>Task</th><th style="width:15%">Status</th></tr></thead>
+        <tbody>`;
+      items.forEach((t, i) => {
+        html += `<tr>
+          <td>${i + 1}</td>
+          <td>${escHtml(t.text)}</td>
+          <td class="${t.done ? 'status-done' : 'status-pending'}">${t.done ? 'Completed' : 'Pending'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    });
+    return html;
+  }
+
+  // ---------- Export: Excel ----------
+  $('#export-excel').addEventListener('click', () => {
+    const roleTasks = tasks[currentRole] || [];
+    if (roleTasks.length === 0) {
+      showToast('No tasks to export');
+      return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel library not loaded. Check your connection.');
+      return;
+    }
+
+    const roleName = ROLE_LABELS[currentRole] || currentRole;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB');
+
+    // Build worksheet data
+    const wsData = [
+      ['EduPlanner - Task Report'],
+      ['Role:', roleName],
+      ['Date:', dateStr],
+      ['Generated by:', 'Harmony Digital Consults Ltd'],
+      [],
+      ['#', 'Task', 'Frequency', 'Status']
+    ];
+
+    roleTasks.forEach((t, i) => {
+      wsData.push([
+        i + 1,
+        t.text,
+        t.freq.charAt(0).toUpperCase() + t.freq.slice(1),
+        t.done ? 'Completed' : 'Pending'
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 5 },
+      { wch: 50 },
+      { wch: 12 },
+      { wch: 12 }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, roleName);
+    XLSX.writeFile(wb, `EduPlanner_${roleName.replace(/\s/g, '_')}_${dateStr.replace(/\//g, '-')}.xlsx`);
+    showToast('Excel file downloaded');
+  });
+
+  // ---------- Theme Toggle ----------
+  (function initTheme() {
+    const toggle = $('[data-theme-toggle]');
+    const root = document.documentElement;
+    let theme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+    root.setAttribute('data-theme', theme);
+    updateToggleIcon(toggle, theme);
+
+    toggle.addEventListener('click', () => {
+      theme = theme === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', theme);
+      toggle.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' mode');
+      updateToggleIcon(toggle, theme);
+    });
+  })();
+
+  function updateToggleIcon(btn, theme) {
+    btn.innerHTML = theme === 'dark'
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
+
+  // ---------- Toast ----------
+  function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('leaving');
+      setTimeout(() => toast.remove(), 200);
+    }, 2400);
+  }
+
+  // ---------- PWA Install ----------
+  let deferredPrompt = null;
+  const installBtn = $('#install-btn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.style.display = 'inline-flex';
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.style.display = 'none';
+    if (outcome === 'accepted') showToast('App installed');
+  });
+
+  // ---------- Service Worker ----------
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // ---------- Init ----------
+  loadTasks();
+  renderTasks();
+
+})();

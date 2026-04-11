@@ -1,0 +1,25 @@
+{
+  "name": "EduPlanner — Harmony Digital Consults",
+  "short_name": "EduPlanner",
+  "description": "A free, role-based task planner for educators. Organize daily, weekly, and monthly tasks. Works offline.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F8F7F4",
+  "theme_color": "#1B5E4B",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

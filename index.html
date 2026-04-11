@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduPlanner — Harmony Digital Consults Ltd</title>
+  <meta name="description" content="A free, role-based task planner for educators. Organize daily, weekly, and monthly tasks. Export to PDF or Excel. Works offline.">
+  <meta name="theme-color" content="#1B5E4B">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <!-- Fonts -->
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+
+  <!-- Header -->
+  <header class="header" role="banner">
+    <div class="header-inner">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="EduPlanner Logo" width="36" height="36">
+          <rect x="2" y="2" width="36" height="36" rx="8" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M12 13h16M12 20h12M12 27h8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="28" cy="28" r="5" fill="currentColor" opacity="0.15"/>
+          <path d="M26 28l2 2 3-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-name">EduPlanner</span>
+          <span class="brand-sub">by Harmony Digital Consults</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="install-btn" class="btn btn-outline btn-sm" style="display:none" aria-label="Install app">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Install
+        </button>
+        <button data-theme-toggle aria-label="Switch to dark mode" class="btn-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="main-content" class="main">
+    <!-- Welcome Banner -->
+    <section class="welcome" id="welcome-section">
+      <h1 class="welcome-title">Your Education Task Planner</h1>
+      <p class="welcome-desc">Select your role, manage tasks by frequency, and export your progress as PDF or Excel.</p>
+    </section>
+
+    <!-- Role Selector Tabs -->
+    <nav class="role-tabs" aria-label="Role selection">
+      <div class="tabs-scroll">
+        <button class="tab active" data-role="teacher" aria-selected="true" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Teacher
+        </button>
+        <button class="tab" data-role="administrator" aria-selected="false" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Administrator
+        </button>
+        <button class="tab" data-role="hod" aria-selected="false" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Head of Dept
+        </button>
+        <button class="tab" data-role="ict" aria-selected="false" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          ICT Coordinator
+        </button>
+        <button class="tab" data-role="librarian" aria-selected="false" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Librarian
+        </button>
+        <button class="tab" data-role="counselor" aria-selected="false" role="tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          Counselor
+        </button>
+      </div>
+    </nav>
+
+    <!-- Task Workspace -->
+    <div class="workspace">
+      <!-- Frequency Filter -->
+      <div class="freq-bar">
+        <div class="freq-tabs" role="tablist" aria-label="Task frequency">
+          <button class="freq-tab active" data-freq="daily" role="tab" aria-selected="true">Daily</button>
+          <button class="freq-tab" data-freq="weekly" role="tab" aria-selected="false">Weekly</button>
+          <button class="freq-tab" data-freq="monthly" role="tab" aria-selected="false">Monthly</button>
+          <button class="freq-tab" data-freq="all" role="tab" aria-selected="false">All</button>
+        </div>
+        <div class="task-stats">
+          <span class="stat-done" id="stat-done">0</span>/<span id="stat-total">0</span> done
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="progress-wrap">
+        <div class="progress-bar" id="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Add Task -->
+      <form class="add-task-form" id="add-task-form">
+        <label for="new-task-input" class="sr-only">Add a new task</label>
+        <input type="text" id="new-task-input" class="task-input" placeholder="Add a new task..." required autocomplete="off" maxlength="200">
+        <select id="new-task-freq" class="task-select" aria-label="Task frequency">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add
+        </button>
+      </form>
+
+      <!-- Task List -->
+      <div class="task-list" id="task-list" role="list" aria-label="Task list">
+        <!-- Tasks rendered by JS -->
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state" id="empty-state" style="display:none">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4">
+          <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        <h3>All clear for this view</h3>
+        <p>No tasks here yet. Add one above or switch frequency tabs.</p>
+      </div>
+
+      <!-- Export Actions -->
+      <div class="export-bar">
+        <button class="btn btn-outline" id="export-pdf">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Export PDF
+        </button>
+        <button class="btn btn-outline" id="export-excel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Export Excel
+        </button>
+        <button class="btn btn-ghost" id="clear-done">
+          Clear completed
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <svg class="footer-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" aria-hidden="true">
+          <rect x="2" y="2" width="36" height="36" rx="8" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M12 13h16M12 20h12M12 27h8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="28" cy="28" r="5" fill="currentColor" opacity="0.15"/>
+          <path d="M26 28l2 2 3-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>EduPlanner by <strong>Harmony Digital Consults Ltd</strong></span>
+      </div>
+      <div class="footer-links">
+        <span class="footer-badge">Open Source</span>
+        <span class="footer-sep">&middot;</span>
+        <span>No account needed</span>
+        <span class="footer-sep">&middot;</span>
+        <span>Data stays on your device</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
