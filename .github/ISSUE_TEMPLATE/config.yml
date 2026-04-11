@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: EduPlanner Live App
+    url: https://eduplanner.harmonydigitalconsults.com
+    about: Open the live EduPlanner app — try it before reporting an issue.
+
+  - name: Contact Harmony Digital Consults Ltd
+    url: mailto:eziekechukwuemerie@gmail.com
+    about: Reach out to the maintainers directly for questions that do not fit the issue templates above.

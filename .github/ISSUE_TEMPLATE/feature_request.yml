@@ -1,0 +1,80 @@
+name: Feature Request
+description: Suggest a new feature or improvement for EduPlanner
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea that would make EduPlanner more useful in your school? We would love to hear it!
+
+        You do not need to be a developer to suggest features — educator insights are just as valuable. Please search [existing issues](../../issues) first to avoid duplicates.
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: Describe the feature or improvement you have in mind. Be as clear and specific as possible.
+      placeholder: "Example: Add a 'Mark All Complete' button for the daily task list so teachers can quickly clear their tasks at the end of the school day."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: who-benefits
+    attributes:
+      label: Who Benefits from This Feature?
+      description: Select all roles that would benefit. This helps us prioritise features that serve the most users.
+      options:
+        - label: Teachers
+        - label: Administrators
+        - label: Heads of Department (HODs)
+        - label: ICT Coordinators
+        - label: Librarians
+        - label: School Counselors
+        - label: All users
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe a real scenario where this feature would help. Walk us through a typical situation in your school where this would make a difference.
+      placeholder: |
+        Example: At the end of every Friday, I have to manually tick off 12–15 recurring tasks one by one. It takes several minutes just to close out the week. A 'Mark All Complete' button would save a lot of time for teachers who use EduPlanner daily.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: willing-to-help
+    attributes:
+      label: Are You Willing to Help Implement This?
+      description: No pressure — this is just to help us understand the level of community interest.
+      options:
+        - "Yes - I can code it"
+        - "Yes - I can test it"
+        - "Yes - I can provide task templates or content"
+        - "No - just suggesting"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Suggestion
+      description: How important do you feel this feature is?
+      options:
+        - Nice to have
+        - Important
+        - Critical
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Anything else you would like to add? Links to similar tools, mockups, or related issues are welcome.
+      placeholder: "Optional — paste links, attach images, or add any extra detail here."
+    validations:
+      required: false

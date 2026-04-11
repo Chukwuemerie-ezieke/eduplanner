@@ -1,0 +1,86 @@
+name: Task Template Suggestion
+description: Suggest new tasks for an existing role, or propose an entirely new role — no coding required!
+title: "[Task Template]: "
+labels: ["task-template", "educator-contribution"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Suggest New Tasks for EduPlanner
+
+        Thank you for helping us make EduPlanner more useful! You know your role better than anyone — your input directly improves the experience for thousands of educators.
+
+        This form is designed for non-developers. No technical knowledge needed — just tell us about the tasks that matter most in your daily school life.
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      description: Which EduPlanner role are these tasks for? Select "New role suggestion" if you are proposing a role that does not yet exist.
+      options:
+        - Teacher
+        - Administrator
+        - Head of Department
+        - ICT Coordinator
+        - Librarian
+        - School Counselor
+        - New role suggestion
+    validations:
+      required: true
+
+  - type: input
+    id: new-role-name
+    attributes:
+      label: New Role Name (if applicable)
+      description: If you selected "New role suggestion" above, what should the role be called?
+      placeholder: "Example: Deputy Principal, Sports Coordinator, Bursar"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Task Frequency
+      description: How often are these tasks performed?
+      options:
+        - Daily
+        - Weekly
+        - Monthly
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-tasks
+    attributes:
+      label: Suggested Tasks
+      description: List the tasks you would like added, one per line. Be as specific as possible — clear task names work best.
+      placeholder: |
+        Example (Teacher, Daily):
+        Mark class attendance register
+        Review lesson notes for next period
+        Check and respond to parent messages
+        Update student performance tracker
+        Submit daily report to HOD
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Why Are These Tasks Important?
+      description: Help us understand the context. Why should these tasks be in EduPlanner? What happens if they are missed or forgotten?
+      placeholder: |
+        Example: Marking the attendance register first thing every morning is a statutory requirement in most Nigerian secondary schools. Having it as a daily task reminder ensures teachers do not overlook it during a busy morning.
+    validations:
+      required: false
+
+  - type: input
+    id: your-role
+    attributes:
+      label: Your Role in Education
+      description: Optional — but helpful! Knowing your role helps us understand where the suggestion is coming from.
+      placeholder: "Example: Secondary school class teacher, Lagos State, 8 years experience"
+    validations:
+      required: false

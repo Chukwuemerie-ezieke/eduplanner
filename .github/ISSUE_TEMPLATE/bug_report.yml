@@ -1,0 +1,102 @@
+name: Bug Report
+description: Report something that is not working correctly in EduPlanner
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug! Please fill in as much detail as you can — the more context you provide, the faster we can fix it.
+
+        Before submitting, please [search existing issues](../../issues) to check whether this has already been reported.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug. What went wrong?
+      placeholder: "Example: The Export to Excel button does not respond when clicked in dark mode."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Walk us through exactly how to trigger the bug.
+      placeholder: |
+        1. Open EduPlanner and select the 'Teacher' role
+        2. Add a new daily task
+        3. Switch to dark mode using the toggle
+        4. Click 'Export to Excel'
+        5. Nothing happens
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: "The Excel file should download automatically."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened instead?
+      placeholder: "Clicking the button does nothing. No file downloads and no error message appears."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role Being Used
+      description: Which EduPlanner role were you using when you encountered the bug?
+      options:
+        - Teacher
+        - Administrator
+        - Head of Department
+        - ICT Coordinator
+        - Librarian
+        - School Counselor
+        - N/A
+    validations:
+      required: false
+
+  - type: dropdown
+    id: task-frequency
+    attributes:
+      label: Task Frequency
+      description: Which task frequency tab were you on when the bug occurred?
+      options:
+        - Daily
+        - Weekly
+        - Monthly
+        - All
+        - N/A
+    validations:
+      required: false
+
+  - type: input
+    id: browser-device
+    attributes:
+      label: Browser and Device
+      description: What browser and device are you using? Include version numbers if you can.
+      placeholder: "Example: Chrome 124 on Android 12 (Samsung Galaxy A32)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Screen Recording
+      description: If applicable, paste screenshots or a link to a screen recording here. This is very helpful for visual bugs.
+      placeholder: "Drag and drop images here, or paste a link."
+    validations:
+      required: false
