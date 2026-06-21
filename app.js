@@ -175,6 +175,7 @@
 
   // ---------- State ----------
   let currentRole = 'teacher';
+  let draggedTaskIndex = null;
   let currentFreq = 'daily';
   let tasks = {}; // { role: [{ id, text, freq, done }] }
 
@@ -242,6 +243,8 @@
   }
 
   function renderTasks() {
+    const printDate = document.getElementById('print-date');
+    if (printDate) printDate.textContent = "Role: " + (ROLE_LABELS[currentRole] || currentRole) + " | Date: " + new Date().toLocaleDateString();
     taskList.innerHTML = '';
     const roleTasks = tasks[currentRole] || [];
     let toShow = currentFreq === 'all' ? roleTasks : roleTasks.filter(t => t.freq === currentFreq);
@@ -261,8 +264,11 @@
           <input type="checkbox" id="${checkId}" class="task-checkbox" ${t.done ? 'checked' : ''} aria-label="Mark task complete">
           <div class="task-content">
             <label for="${checkId}" class="task-text">${escHtml(t.text)}</label>
+
             ${currentFreq === 'all' ? `<div class="task-freq-badge ${t.freq}">${t.freq}</div>` : ''}
+            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;">Due: ${t.dueDate}</div>` : ''}
           </div>
+
           <div class="task-actions">
             <button class="task-delete" aria-label="Delete task">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -291,6 +297,43 @@
             renderTasks();
             showToast('Task deleted');
           }, 200);
+        });
+
+
+        // Drag and Drop
+        item.setAttribute('draggable', 'true');
+        item.addEventListener('dragstart', (e) => {
+          draggedTaskIndex = tasks[currentRole].findIndex(x => x.id === t.id);
+          e.dataTransfer.effectAllowed = 'move';
+          item.style.opacity = '0.5';
+        });
+
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          item.style.borderTop = '2px solid var(--color-primary)';
+        });
+
+        item.addEventListener('dragleave', () => {
+          item.style.borderTop = '';
+        });
+
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          item.style.borderTop = '';
+          const targetTaskIndex = tasks[currentRole].findIndex(x => x.id === t.id);
+          if (draggedTaskIndex !== null && targetTaskIndex !== null && draggedTaskIndex !== targetTaskIndex) {
+            const draggedTask = tasks[currentRole][draggedTaskIndex];
+            tasks[currentRole].splice(draggedTaskIndex, 1);
+            tasks[currentRole].splice(targetTaskIndex, 0, draggedTask);
+            saveTasks();
+            renderTasks();
+          }
+        });
+
+        item.addEventListener('dragend', () => {
+          item.style.opacity = '1';
+          draggedTaskIndex = null;
         });
 
         taskList.appendChild(item);
@@ -360,7 +403,51 @@
     return d.innerHTML;
   }
 
+
+  let customRoles = JSON.parse(localStorage.getItem('eduplanner_custom_roles')) || {};
+  Object.assign(ROLE_LABELS, customRoles);
+
+  // Create tabs for custom roles
+  const tabsScroll = document.querySelector('.tabs-scroll');
+  const addRoleBtn = document.getElementById('add-role-btn');
+  for (const [key, label] of Object.entries(customRoles)) {
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.dataset.role = key;
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', 'false');
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${label}`;
+    tabsScroll.insertBefore(btn, addRoleBtn);
+  }
+
   // ---------- Event Handlers ----------
+
+  // Add Role Button
+  if ($('#add-role-btn')) {
+    $('#add-role-btn').addEventListener('click', () => {
+      const roleName = prompt("Enter the name of the new role (e.g., 'Sports Coordinator'):");
+      if (roleName && roleName.trim() !== '') {
+        const roleKey = roleName.trim().toLowerCase().replace(/\s+/g, '_');
+        if (ROLE_LABELS[roleKey]) {
+           showToast('Role already exists');
+           return;
+        }
+        ROLE_LABELS[roleKey] = roleName.trim();
+        customRoles[roleKey] = roleName.trim();
+        localStorage.setItem('eduplanner_custom_roles', JSON.stringify(customRoles));
+
+        // Add default empty tasks array for this role
+        tasks[roleKey] = [];
+        saveTasks();
+
+        // Reload page to re-bind events to new tabs easily
+        location.reload();
+      }
+    });
+  }
+
+  // Role tabs event delegation (since new tabs might be added dynamically, but reload handles it)
+
   // Role tabs
   $$('.tab[data-role]').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -394,6 +481,7 @@
   addForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = taskInput.value.trim();
+    const dueDate = $('#new-task-date').value;
     if (!text) return;
 
     const freq = taskFreqSelect.value;
@@ -402,10 +490,12 @@
       id: uid(),
       text,
       freq,
+      dueDate: dueDate || null,
       done: false
     });
     saveTasks();
     taskInput.value = '';
+    $('#new-task-date').value = '';
     // Switch freq view if needed
     if (currentFreq !== 'all' && currentFreq !== freq) {
       // Auto switch to the frequency of the added task
@@ -572,6 +662,90 @@
     XLSX.writeFile(wb, `EduPlanner_${roleName.replace(/\s/g, '_')}_${dateStr.replace(/\//g, '-')}.xlsx`);
     showToast('Excel file downloaded');
   });
+
+
+  // ---------- Export: JSON Backup ----------
+  $('#export-backup').addEventListener('click', () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tasks));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "eduplanner_backup_" + new Date().toISOString().split('T')[0] + ".json");
+    document.body.appendChild(downloadAnchorNode); // required for firefox
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+    showToast('Backup downloaded');
+  });
+
+  // ---------- Import: JSON Backup ----------
+  $('#import-backup-btn').addEventListener('click', () => {
+    $('#import-backup-input').click();
+  });
+
+  $('#import-backup-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedTasks = JSON.parse(event.target.result);
+        if (typeof importedTasks === 'object' && importedTasks !== null) {
+          tasks = importedTasks;
+          saveTasks();
+          renderTasks();
+          showToast('Backup restored successfully');
+        } else {
+          throw new Error('Invalid format');
+        }
+      } catch (err) {
+        showToast('Error restoring backup. Invalid file.');
+      }
+      e.target.value = ''; // reset
+    };
+    reader.readAsText(file);
+  });
+
+
+  // ---------- Localization / i18n ----------
+  const translations = {
+    en: {
+      welcomeTitle: "Your Education Task Planner",
+      welcomeDesc: "Select your role, manage tasks by frequency, and export your progress as PDF or Excel.",
+      clearCompleted: "Clear completed"
+    },
+    fr: {
+      welcomeTitle: "Votre planificateur de tâches éducatives",
+      welcomeDesc: "Sélectionnez votre rôle, gérez les tâches par fréquence et exportez vos progrès au format PDF ou Excel.",
+      clearCompleted: "Effacer les terminées"
+    },
+    pidgin: {
+      welcomeTitle: "Your School Work Planner",
+      welcomeDesc: "Choose your work, arrange your task dem, and download everything as PDF or Excel.",
+      clearCompleted: "Clear the ones wey finish"
+    }
+  };
+
+  function applyLanguage(lang) {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (translations[lang] && translations[lang][key]) {
+        el.textContent = translations[lang][key];
+      }
+    });
+  }
+
+  const langSelect = $('#lang-select');
+  if (langSelect) {
+    const savedLang = localStorage.getItem('eduplanner_lang') || 'en';
+    langSelect.value = savedLang;
+    applyLanguage(savedLang);
+
+    langSelect.addEventListener('change', (e) => {
+      const lang = e.target.value;
+      localStorage.setItem('eduplanner_lang', lang);
+      applyLanguage(lang);
+    });
+  }
 
   // ---------- Theme Toggle ----------
   (function initTheme() {
