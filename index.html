@@ -43,6 +43,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Install
         </button>
+
+        <select id="lang-select" class="btn btn-outline btn-sm" aria-label="Select Language">
+          <option value="en">EN</option>
+          <option value="fr">FR</option>
+          <option value="pidgin">Pidgin</option>
+        </select>
+
         <button data-theme-toggle aria-label="Switch to dark mode" class="btn-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
@@ -54,8 +61,8 @@
   <main id="main-content" class="main">
     <!-- Welcome Banner -->
     <section class="welcome" id="welcome-section">
-      <h1 class="welcome-title">Your Education Task Planner</h1>
-      <p class="welcome-desc">Select your role, manage tasks by frequency, and export your progress as PDF or Excel.</p>
+      <h1 class="welcome-title" data-i18n="welcomeTitle">Your Education Task Planner</h1>
+      <p class="welcome-desc" data-i18n="welcomeDesc">Select your role, manage tasks by frequency, and export your progress as PDF or Excel.</p>
     </section>
 
     <!-- Role Selector Tabs -->
@@ -85,10 +92,18 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           Counselor
         </button>
+
+        <button class="tab" id="add-role-btn" aria-selected="false" role="tab" style="font-weight:bold; color:var(--color-primary);">
+          + Add Role
+        </button>
       </div>
     </nav>
 
     <!-- Task Workspace -->
+    <div class="print-header" style="display:none">
+      <h2>EduPlanner - Task Report</h2>
+      <p id="print-date"></p>
+    </div>
     <div class="workspace">
       <!-- Frequency Filter -->
       <div class="freq-bar">
@@ -114,6 +129,9 @@
       <form class="add-task-form" id="add-task-form">
         <label for="new-task-input" class="sr-only">Add a new task</label>
         <input type="text" id="new-task-input" class="task-input" placeholder="Add a new task..." required autocomplete="off" maxlength="200">
+
+        <label for="new-task-date" class="sr-only">Due Date</label>
+        <input type="date" id="new-task-date" class="task-input" style="max-width: 140px;" aria-label="Task due date">
         <select id="new-task-freq" class="task-select" aria-label="Task frequency">
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
@@ -149,7 +167,17 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Export Excel
         </button>
-        <button class="btn btn-ghost" id="clear-done">
+
+        <button class="btn btn-outline" id="export-backup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Backup (JSON)
+        </button>
+        <button class="btn btn-outline" id="import-backup-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Restore
+        </button>
+        <input type="file" id="import-backup-input" accept=".json" style="display:none">
+        <button class="btn btn-ghost" id="clear-done" data-i18n="clearCompleted">
           Clear completed
         </button>
       </div>

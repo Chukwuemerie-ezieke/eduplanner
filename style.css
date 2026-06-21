@@ -480,6 +480,8 @@ body {
   animation: fadeInUp 250ms var(--ease) both;
 }
 .task-item:hover { background: var(--color-surface-2); }
+.task-item[draggable="true"] { cursor: grab; }
+.task-item[draggable="true"]:active { cursor: grabbing; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(6px); }
@@ -524,6 +526,8 @@ body {
   color: var(--color-text);
   word-break: break-word;
   transition: all var(--dur) var(--ease);
+  cursor: pointer;
+  display: block;
 }
 
 .task-item.done .task-text {
@@ -720,10 +724,16 @@ body {
   border-radius: var(--radius-sm);
 }
 
+
 /* Print */
 @media print {
-  .header, .footer, .add-task-form, .export-bar, .freq-bar, .role-tabs, .welcome, .progress-wrap { display: none !important; }
-  .workspace { border: none; box-shadow: none; }
-  .task-actions { display: none !important; }
-  .task-item { break-inside: avoid; }
+  body { padding: 0; background: white; color: black; }
+  .header, .footer, .add-task-form, .export-bar, .freq-bar, .role-tabs, .welcome, .progress-wrap, .task-actions, .empty-state, #toast-container { display: none !important; }
+  .workspace { border: none; box-shadow: none; background: white; }
+  .task-item { break-inside: avoid; padding: 10px 0; border-bottom: 1px solid #ccc; background: white !important; display: flex;}
+  .print-header { display: block !important; margin-bottom: 20px; }
+  .print-header h2 { font-size: 24px; color: black; margin-bottom: 5px; }
+  .print-header p { font-size: 14px; color: #555; }
+  .task-text { color: black !important; }
+  .task-freq-badge { border: 1px solid #000; background: transparent !important; color: #000 !important; }
 }
