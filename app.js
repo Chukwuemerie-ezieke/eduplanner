@@ -242,19 +242,58 @@
   }
 
   function renderTasks() {
-    const filtered = getFilteredTasks();
-    // Sort: incomplete first, then by original order
-    const sorted = [...filtered].sort((a, b) => a.done - b.done);
-
     taskList.innerHTML = '';
-    if (sorted.length === 0) {
+    const roleTasks = tasks[currentRole] || [];
+    let toShow = currentFreq === 'all' ? roleTasks : roleTasks.filter(t => t.freq === currentFreq);
+
+    if (toShow.length === 0) {
       emptyState.style.display = 'flex';
-      taskList.style.display = 'none';
     } else {
       emptyState.style.display = 'none';
-      taskList.style.display = 'block';
-      sorted.forEach(task => {
-        taskList.appendChild(createTaskEl(task));
+      toShow.forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'task-item' + (t.done ? ' done' : '');
+        item.dataset.id = t.id;
+
+        const checkId = 'check-' + t.id;
+
+        item.innerHTML = `
+          <input type="checkbox" id="${checkId}" class="task-checkbox" ${t.done ? 'checked' : ''} aria-label="Mark task complete">
+          <div class="task-content">
+            <label for="${checkId}" class="task-text">${escHtml(t.text)}</label>
+            ${currentFreq === 'all' ? `<div class="task-freq-badge ${t.freq}">${t.freq}</div>` : ''}
+          </div>
+          <div class="task-actions">
+            <button class="task-delete" aria-label="Delete task">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        `;
+
+        // Checkbox event
+        item.querySelector('.task-checkbox').addEventListener('change', (e) => {
+          t.done = e.target.checked;
+          if (t.done) {
+            item.classList.add('done');
+          } else {
+            item.classList.remove('done');
+          }
+          saveTasks();
+          updateStats();
+        });
+
+        // Delete event
+        item.querySelector('.task-delete').addEventListener('click', () => {
+          tasks[currentRole] = tasks[currentRole].filter(x => x.id !== t.id);
+          item.style.opacity = '0';
+          setTimeout(() => {
+            saveTasks();
+            renderTasks();
+            showToast('Task deleted');
+          }, 200);
+        });
+
+        taskList.appendChild(item);
       });
     }
     updateStats();
@@ -538,13 +577,15 @@
   (function initTheme() {
     const toggle = $('[data-theme-toggle]');
     const root = document.documentElement;
-    let theme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+    const savedTheme = localStorage.getItem('eduplanner_theme');
+    let theme = savedTheme ? savedTheme : (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
     root.setAttribute('data-theme', theme);
     updateToggleIcon(toggle, theme);
 
     toggle.addEventListener('click', () => {
       theme = theme === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', theme);
+      localStorage.setItem('eduplanner_theme', theme);
       toggle.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' mode');
       updateToggleIcon(toggle, theme);
     });

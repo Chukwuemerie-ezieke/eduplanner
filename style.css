@@ -524,6 +524,8 @@ body {
   color: var(--color-text);
   word-break: break-word;
   transition: all var(--dur) var(--ease);
+  cursor: pointer;
+  display: block;
 }
 
 .task-item.done .task-text {
