@@ -175,6 +175,16 @@
 
   // ---------- State ----------
   let currentRole = 'teacher';
+
+  let lastDeletedTask = null;
+  let lastDeletedRole = null;
+
+  let archive = JSON.parse(localStorage.getItem('eduplanner_archive')) || [];
+
+  function saveArchive() {
+    localStorage.setItem('eduplanner_archive', JSON.stringify(archive));
+  }
+
   let draggedTaskIndex = null;
   let currentFreq = 'daily';
   let tasks = {}; // { role: [{ id, text, freq, done }] }
@@ -249,6 +259,14 @@
     const roleTasks = tasks[currentRole] || [];
     let toShow = currentFreq === 'all' ? roleTasks : roleTasks.filter(t => t.freq === currentFreq);
 
+    // Apply search filter
+    const searchInput = document.getElementById('search-input');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    if (searchTerm) {
+      toShow = toShow.filter(t => t.text.toLowerCase().includes(searchTerm));
+    }
+
+
     if (toShow.length === 0) {
       emptyState.style.display = 'flex';
     } else {
@@ -263,10 +281,11 @@
         item.innerHTML = `
           <input type="checkbox" id="${checkId}" class="task-checkbox" ${t.done ? 'checked' : ''} aria-label="Mark task complete">
           <div class="task-content">
-            <label for="${checkId}" class="task-text">${escHtml(t.text)}</label>
+            <label for="${checkId}" class="task-text">${parseMarkdown(t.text)}</label>
 
             ${currentFreq === 'all' ? `<div class="task-freq-badge ${t.freq}">${t.freq}</div>` : ''}
-            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;">Due: ${t.dueDate}</div>` : ''}
+            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;display:inline-block;">Due: ${t.dueDate}</div>` : ''}
+            ${t.tag ? `<span class="task-tag" style="font-size:10px; background:var(--color-surface-2); border: 1px solid var(--color-border); padding:2px 6px; border-radius:4px; margin-left: 6px; display:inline-block;">${escHtml(t.tag)}</span>` : ''}
           </div>
 
           <div class="task-actions">
@@ -290,12 +309,18 @@
 
         // Delete event
         item.querySelector('.task-delete').addEventListener('click', () => {
+
+          lastDeletedTask = t;
+          lastDeletedRole = currentRole;
+          archive.push({ ...t, deletedAt: new Date().toISOString() });
+          saveArchive();
+
           tasks[currentRole] = tasks[currentRole].filter(x => x.id !== t.id);
           item.style.opacity = '0';
           setTimeout(() => {
             saveTasks();
             renderTasks();
-            showToast('Task deleted');
+            showUndoToast('Task deleted');
           }, 200);
         });
 
@@ -385,6 +410,23 @@
     return div;
   }
 
+
+  function updateAnalytics() {
+    let total = 0;
+    let done = 0;
+    for (const r in tasks) {
+      if (tasks[r]) {
+        total += tasks[r].length;
+        done += tasks[r].filter(t => t.done).length;
+      }
+    }
+    const scoreEl = document.getElementById('productivity-score');
+    if (scoreEl) {
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      scoreEl.textContent = pct + '%';
+    }
+  }
+
   function updateStats() {
     const filtered = getFilteredTasks();
     const done = filtered.filter(t => t.done).length;
@@ -395,6 +437,16 @@
     const pct = total === 0 ? 0 : Math.round((done / total) * 100);
     progressFill.style.width = pct + '%';
     $('#progress-bar').setAttribute('aria-valuenow', pct);
+  }
+
+
+  function parseMarkdown(str) {
+    let html = escHtml(str);
+    // Bold **text**
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic *text*
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    return html;
   }
 
   function escHtml(str) {
@@ -418,6 +470,15 @@
     btn.setAttribute('aria-selected', 'false');
     btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${label}`;
     tabsScroll.insertBefore(btn, addRoleBtn);
+  }
+
+
+  // Search event
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      renderTasks();
+    });
   }
 
   // ---------- Event Handlers ----------
@@ -482,6 +543,7 @@
     e.preventDefault();
     const text = taskInput.value.trim();
     const dueDate = $('#new-task-date').value;
+    const tag = $('#new-task-tag') ? $('#new-task-tag').value.trim() : '';
     if (!text) return;
 
     const freq = taskFreqSelect.value;
@@ -491,11 +553,13 @@
       text,
       freq,
       dueDate: dueDate || null,
+      tag: tag || null,
       done: false
     });
     saveTasks();
     taskInput.value = '';
     $('#new-task-date').value = '';
+    if ($('#new-task-tag')) $('#new-task-tag').value = '';
     // Switch freq view if needed
     if (currentFreq !== 'all' && currentFreq !== freq) {
       // Auto switch to the frequency of the added task
@@ -518,7 +582,12 @@
   $('#clear-done').addEventListener('click', () => {
     if (!tasks[currentRole]) return;
     const before = tasks[currentRole].length;
+
+    const completed = tasks[currentRole].filter(t => t.done);
+    completed.forEach(t => archive.push({ ...t, deletedAt: new Date().toISOString() }));
+    saveArchive();
     tasks[currentRole] = tasks[currentRole].filter(t => !t.done);
+
     const removed = before - tasks[currentRole].length;
     if (removed > 0) {
       saveTasks();
@@ -747,6 +816,53 @@
     });
   }
 
+
+  // ---------- Notifications ----------
+  const notifsBtn = document.getElementById('enable-notifs-btn');
+  if (notifsBtn) {
+    if (Notification.permission === 'granted') {
+      notifsBtn.style.display = 'none';
+      checkDueTasks();
+    }
+
+    notifsBtn.addEventListener('click', () => {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          notifsBtn.style.display = 'none';
+          showToast('Notifications enabled!');
+          checkDueTasks();
+        } else {
+          showToast('Notifications denied.');
+        }
+      });
+    });
+  }
+
+  function checkDueTasks() {
+    if (Notification.permission !== 'granted') return;
+
+    const today = new Date().toISOString().split('T')[0];
+    let dueCount = 0;
+
+    // Check all roles
+    for (const r in tasks) {
+      if (tasks[r]) {
+        tasks[r].forEach(t => {
+          if (!t.done && t.dueDate && t.dueDate <= today) {
+            dueCount++;
+          }
+        });
+      }
+    }
+
+    if (dueCount > 0) {
+      new Notification('EduPlanner Reminders', {
+        body: `You have ${dueCount} task(s) due today or overdue.`,
+        icon: 'icons/icon-192.png'
+      });
+    }
+  }
+
   // ---------- Theme Toggle ----------
   (function initTheme() {
     const toggle = $('[data-theme-toggle]');
@@ -772,6 +888,36 @@
   }
 
   // ---------- Toast ----------
+
+  function showUndoToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `${msg} <button class="btn-undo" style="margin-left: 10px; background:transparent; color:var(--color-primary-light); border:none; cursor:pointer; font-weight:bold; text-decoration:underline;">Undo</button>`;
+
+    toast.querySelector('.btn-undo').addEventListener('click', () => {
+      if (lastDeletedTask && lastDeletedRole) {
+        if (!tasks[lastDeletedRole]) tasks[lastDeletedRole] = [];
+        tasks[lastDeletedRole].push(lastDeletedTask);
+        // remove from archive
+        archive = archive.filter(a => a.id !== lastDeletedTask.id);
+        saveArchive();
+        saveTasks();
+        if (currentRole === lastDeletedRole) renderTasks();
+        lastDeletedTask = null;
+        toast.remove();
+        showToast('Task restored');
+      }
+    });
+
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.classList.add('leaving');
+        setTimeout(() => toast.remove(), 200);
+      }
+    }, 4000); // give them a bit more time to click undo
+  }
+
   function showToast(msg) {
     const toast = document.createElement('div');
     toast.className = 'toast';
@@ -809,6 +955,7 @@
 
   // ---------- Init ----------
   loadTasks();
+  updateAnalytics();
   renderTasks();
 
 })();
