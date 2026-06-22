@@ -39,6 +39,14 @@
         </div>
       </div>
       <div class="header-actions">
+
+        <div id="pomodoro-timer" style="display: flex; align-items: center; gap: 8px; margin-right: 15px; background: var(--color-surface-2); padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid var(--color-border);">
+          <span>⏱️</span>
+          <span id="pomodoro-display">25:00</span>
+          <button id="pomodoro-start" style="background: transparent; border: none; cursor: pointer; color: var(--color-primary); padding: 0;">▶</button>
+          <button id="pomodoro-reset" style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 0;">↺</button>
+        </div>
+
         <button id="install-btn" class="btn btn-outline btn-sm" style="display:none" aria-label="Install app">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Install
@@ -161,7 +169,13 @@
       <div class="search-bar" style="padding: 10px 18px; border-bottom: 1px solid var(--color-divider);">
         <input type="text" id="search-input" class="task-input" placeholder="Search tasks..." aria-label="Search tasks" style="width: 100%;">
       </div>
-      <!-- Task List -->
+
+      <div style="display:flex; justify-content:flex-end; padding: 0 18px 10px;">
+        <button id="view-toggle-btn" class="btn btn-outline btn-sm">Switch to Calendar View</button>
+      </div>
+<!-- Task List -->
+      <div id="calendar-view" style="display:none; padding: 18px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;"></div>
+
 
       <div class="task-list" id="task-list" role="list" aria-label="Task list">
         <!-- Tasks rendered by JS -->
@@ -187,6 +201,11 @@
           Export Excel
         </button>
 
+
+        <button class="btn btn-outline" id="share-url-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+          Share Current Role via URL
+        </button>
         <button class="btn btn-outline" id="export-backup">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Backup (JSON)
@@ -224,6 +243,18 @@
       </div>
     </div>
   </footer>
+
+
+  <!-- Quick Notes / Scratchpad -->
+  <div id="scratchpad-container" class="scratchpad-closed" style="position: fixed; bottom: 20px; left: 20px; z-index: 999; background: var(--color-surface); border: 1px solid var(--color-primary); border-radius: 8px; box-shadow: var(--shadow-lg); overflow: hidden; transition: all 0.3s ease;">
+    <div id="scratchpad-header" style="background: var(--color-primary); color: white; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold;">
+      <span>📝 Quick Notes</span>
+      <svg id="scratchpad-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </div>
+    <div id="scratchpad-body" style="padding: 10px; display: none;">
+      <textarea id="scratchpad-textarea" placeholder="Jot down quick thoughts here..." style="width: 250px; height: 150px; border: 1px solid var(--color-border); border-radius: 4px; padding: 8px; font-family: inherit; font-size: 13px; resize: none; background: var(--color-bg); color: var(--color-text);"></textarea>
+    </div>
+  </div>
 
   <!-- Toast container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>

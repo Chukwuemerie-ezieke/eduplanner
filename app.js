@@ -267,6 +267,15 @@
     }
 
 
+
+    if (currentViewMode === 'calendar') {
+      renderCalendarView(toShow);
+      updateStats();
+      return;
+    }
+    calendarContainer.style.display = 'none';
+    taskList.style.display = 'block';
+
     if (toShow.length === 0) {
       emptyState.style.display = 'flex';
     } else {
@@ -307,7 +316,29 @@
           updateStats();
         });
 
+
+        // Subtask events
+        item.querySelectorAll('.subtask-check').forEach(cb => {
+          cb.addEventListener('change', (e) => {
+            const sidx = e.target.getAttribute('data-sidx');
+            t.subtasks[sidx].done = e.target.checked;
+            saveTasks();
+            renderTasks();
+          });
+        });
+
+        item.querySelector('.add-subtask-btn').addEventListener('click', () => {
+          const stText = prompt("Enter subtask description:");
+          if (stText && stText.trim()) {
+            if (!t.subtasks) t.subtasks = [];
+            t.subtasks.push({ text: stText.trim(), done: false });
+            saveTasks();
+            renderTasks();
+          }
+        });
+
         // Delete event
+
         item.querySelector('.task-delete').addEventListener('click', () => {
 
           lastDeletedTask = t;
@@ -481,6 +512,87 @@
     });
   }
 
+
+  // ---------- View Toggle (List vs Calendar) ----------
+  let currentViewMode = 'list'; // 'list' or 'calendar'
+  const viewToggleBtn = document.getElementById('view-toggle-btn');
+  const calendarContainer = document.getElementById('calendar-view');
+
+  if (viewToggleBtn) {
+    viewToggleBtn.addEventListener('click', () => {
+      currentViewMode = currentViewMode === 'list' ? 'calendar' : 'list';
+      viewToggleBtn.textContent = currentViewMode === 'list' ? 'Switch to Calendar View' : 'Switch to List View';
+      renderTasks();
+    });
+  }
+
+  function renderCalendarView(tasksToRender) {
+    taskList.style.display = 'none';
+    calendarContainer.style.display = 'grid';
+    calendarContainer.innerHTML = '';
+
+    // Group tasks by dueDate (or "No Date")
+    const grouped = tasksToRender.reduce((acc, t) => {
+      const dateKey = t.dueDate || 'No Date';
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(t);
+      return acc;
+    }, {});
+
+    // Sort dates
+    const sortedDates = Object.keys(grouped).sort((a, b) => {
+      if (a === 'No Date') return 1;
+      if (b === 'No Date') return -1;
+      return new Date(a) - new Date(b);
+    });
+
+    if (sortedDates.length === 0) {
+      calendarContainer.style.display = 'none';
+      emptyState.style.display = 'flex';
+      return;
+    }
+
+    emptyState.style.display = 'none';
+
+    sortedDates.forEach(date => {
+      const col = document.createElement('div');
+      col.style.border = '1px solid var(--color-border)';
+      col.style.borderRadius = '8px';
+      col.style.background = 'var(--color-surface-2)';
+      col.style.padding = '10px';
+      col.style.display = 'flex';
+      col.style.flexDirection = 'column';
+      col.style.gap = '8px';
+
+      const header = document.createElement('div');
+      header.style.fontWeight = 'bold';
+      header.style.borderBottom = '1px solid var(--color-divider)';
+      header.style.paddingBottom = '5px';
+      header.style.marginBottom = '5px';
+      header.style.color = date === 'No Date' ? 'var(--color-text-muted)' : 'var(--color-primary)';
+      header.textContent = date;
+      col.appendChild(header);
+
+      grouped[date].forEach(t => {
+        const tDiv = document.createElement('div');
+        tDiv.style.background = 'var(--color-bg)';
+        tDiv.style.padding = '8px';
+        tDiv.style.borderRadius = '4px';
+        tDiv.style.fontSize = '12px';
+        tDiv.style.borderLeft = t.done ? '3px solid var(--color-success)' : '3px solid var(--color-accent)';
+        if (t.done) tDiv.style.opacity = '0.6';
+
+        tDiv.innerHTML = `
+          <div style="${t.done ? 'text-decoration:line-through' : ''}">${parseMarkdown(t.text)}</div>
+          ${t.tag ? `<span style="font-size:9px; background:var(--color-surface-2); padding:1px 4px; border-radius:3px; margin-top:4px; display:inline-block;">${escHtml(t.tag)}</span>` : ''}
+        `;
+        col.appendChild(tDiv);
+      });
+
+      calendarContainer.appendChild(col);
+    });
+  }
+
   // ---------- Event Handlers ----------
 
   // Add Role Button
@@ -554,6 +666,7 @@
       freq,
       dueDate: dueDate || null,
       tag: tag || null,
+      subtasks: [],
       done: false
     });
     saveTasks();
@@ -863,6 +976,86 @@
     }
   }
 
+
+  // ---------- Scratchpad ----------
+  const scratchpadHeader = document.getElementById('scratchpad-header');
+  const scratchpadBody = document.getElementById('scratchpad-body');
+  const scratchpadTextarea = document.getElementById('scratchpad-textarea');
+  const scratchpadIcon = document.getElementById('scratchpad-toggle-icon');
+
+  if (scratchpadHeader && scratchpadTextarea) {
+    // Load saved notes
+    scratchpadTextarea.value = localStorage.getItem('eduplanner_notes') || '';
+
+    // Toggle open/close
+    scratchpadHeader.addEventListener('click', () => {
+      const isOpen = scratchpadBody.style.display === 'block';
+      scratchpadBody.style.display = isOpen ? 'none' : 'block';
+      scratchpadIcon.innerHTML = isOpen
+        ? '<polyline points="18 15 12 9 6 15"></polyline>'
+        : '<polyline points="6 9 12 15 18 9"></polyline>';
+    });
+
+    // Auto-save on type
+    scratchpadTextarea.addEventListener('input', (e) => {
+      localStorage.setItem('eduplanner_notes', e.target.value);
+    });
+  }
+
+
+  // ---------- Pomodoro Timer ----------
+  let pomoInterval = null;
+  let pomoTime = 25 * 60; // 25 minutes
+  let pomoRunning = false;
+
+  const pomoDisplay = document.getElementById('pomodoro-display');
+  const pomoStart = document.getElementById('pomodoro-start');
+  const pomoReset = document.getElementById('pomodoro-reset');
+
+  function updatePomoDisplay() {
+    if (!pomoDisplay) return;
+    const m = Math.floor(pomoTime / 60).toString().padStart(2, '0');
+    const s = (pomoTime % 60).toString().padStart(2, '0');
+    pomoDisplay.textContent = `${m}:${s}`;
+  }
+
+  if (pomoStart && pomoReset) {
+    pomoStart.addEventListener('click', () => {
+      if (pomoRunning) {
+        clearInterval(pomoInterval);
+        pomoRunning = false;
+        pomoStart.textContent = '▶';
+      } else {
+        pomoRunning = true;
+        pomoStart.textContent = '⏸';
+        pomoInterval = setInterval(() => {
+          if (pomoTime > 0) {
+            pomoTime--;
+            updatePomoDisplay();
+          } else {
+            clearInterval(pomoInterval);
+            pomoRunning = false;
+            pomoStart.textContent = '▶';
+            showToast('Time is up! Take a break.');
+            if (Notification.permission === 'granted') {
+              new Notification('EduPlanner Timer', { body: 'Time is up! Take a 5 minute break.', icon: 'icons/icon-192.png' });
+            }
+          }
+        }, 1000);
+      }
+    });
+
+    pomoReset.addEventListener('click', () => {
+      clearInterval(pomoInterval);
+      pomoRunning = false;
+      pomoTime = 25 * 60;
+      pomoStart.textContent = '▶';
+      updatePomoDisplay();
+    });
+
+    updatePomoDisplay();
+  }
+
   // ---------- Theme Toggle ----------
   (function initTheme() {
     const toggle = $('[data-theme-toggle]');
@@ -953,9 +1146,86 @@
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+
+  // ---------- Share via URL ----------
+  const shareBtn = document.getElementById('share-url-btn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+      if (!tasks[currentRole] || tasks[currentRole].length === 0) {
+        showToast('No tasks to share for this role.');
+        return;
+      }
+
+      const roleData = JSON.stringify({ role: currentRole, data: tasks[currentRole] });
+      const encoded = btoa(encodeURIComponent(roleData));
+
+      const url = new URL(window.location.href);
+      url.searchParams.set('import', encoded);
+
+      navigator.clipboard.writeText(url.toString()).then(() => {
+        showToast('Shareable link copied to clipboard!');
+      }).catch(() => {
+        prompt('Copy this link manually:', url.toString());
+      });
+    });
+  }
+
+  // Check URL for import on load
+  function checkUrlImport() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const importData = urlParams.get('import');
+
+    if (importData) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(atob(importData)));
+        if (decoded && decoded.role && Array.isArray(decoded.data)) {
+          if (confirm(`Import ${decoded.data.length} tasks into the "${ROLE_LABELS[decoded.role] || decoded.role}" role?`)) {
+
+            if (!tasks[decoded.role]) tasks[decoded.role] = [];
+
+            // Append imported tasks, avoiding identical duplicates by text
+            let addedCount = 0;
+            decoded.data.forEach(importedTask => {
+              const exists = tasks[decoded.role].find(t => t.text === importedTask.text);
+              if (!exists) {
+                // Generate fresh ID so it doesn't conflict
+                importedTask.id = uid();
+                tasks[decoded.role].push(importedTask);
+                addedCount++;
+              }
+            });
+
+            saveTasks();
+
+            // Remove parameter from URL so it doesn't ask on refresh
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Switch to that role tab
+            const targetTab = document.querySelector(`.tab[data-role="${decoded.role}"]`);
+            if (targetTab) targetTab.click();
+            else {
+                currentRole = decoded.role;
+                renderTasks();
+            }
+
+            setTimeout(() => {
+                showToast(`Imported ${addedCount} new tasks successfully.`);
+            }, 500);
+          } else {
+             window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+      } catch(e) {
+        showToast('Failed to import tasks from URL. Link may be invalid or broken.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }
+
   // ---------- Init ----------
   loadTasks();
   updateAnalytics();
   renderTasks();
+  setTimeout(checkUrlImport, 300);
 
 })();
