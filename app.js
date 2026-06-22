@@ -175,6 +175,7 @@
 
   // ---------- State ----------
   let currentRole = 'teacher';
+  let activeTagFilter = null;
 
   let lastDeletedTask = null;
   let lastDeletedRole = null;
@@ -204,6 +205,63 @@
   const toastContainer = $('#toast-container');
 
   // ---------- Local Storage ----------
+
+  // ---------- Recurring Task Auto-Reset ----------
+  function checkRecurringResets() {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const currentWeekStr = getWeekYearString(now);
+    const currentMonthStr = now.getFullYear() + '-' + now.getMonth();
+
+    const lastOpened = JSON.parse(localStorage.getItem('eduplanner_last_opened')) || {};
+
+    let needsSave = false;
+
+    for (const r in tasks) {
+      if (tasks[r]) {
+        tasks[r].forEach(t => {
+          if (t.done) {
+            if (t.freq === 'daily' && lastOpened.daily !== todayStr) {
+              t.done = false;
+              if(t.subtasks) t.subtasks.forEach(st => st.done = false);
+              needsSave = true;
+            }
+            if (t.freq === 'weekly' && lastOpened.weekly !== currentWeekStr) {
+              t.done = false;
+              if(t.subtasks) t.subtasks.forEach(st => st.done = false);
+              needsSave = true;
+            }
+            if (t.freq === 'monthly' && lastOpened.monthly !== currentMonthStr) {
+              t.done = false;
+              if(t.subtasks) t.subtasks.forEach(st => st.done = false);
+              needsSave = true;
+            }
+          }
+        });
+      }
+    }
+
+    if (needsSave) {
+      saveTasks();
+    }
+
+    // Update last opened stamps
+    localStorage.setItem('eduplanner_last_opened', JSON.stringify({
+      daily: todayStr,
+      weekly: currentWeekStr,
+      monthly: currentMonthStr
+    }));
+  }
+
+  function getWeekYearString(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+    return d.getUTCFullYear() + '-W' + weekNo;
+  }
+
   function loadTasks() {
     try {
       const saved = localStorage.getItem('eduplanner_tasks');
@@ -252,12 +310,68 @@
     return roleTasks.filter(t => t.freq === currentFreq);
   }
 
+
+  function renderTagFilters(roleTasks) {
+    const container = document.getElementById('tag-filters');
+    if (!container) return;
+
+    // Extract unique tags
+    const tags = new Set();
+    roleTasks.forEach(t => {
+      if (t.tag) tags.add(t.tag.toLowerCase());
+    });
+
+    if (tags.size === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'flex';
+    container.innerHTML = '';
+
+    // "All" pill
+    const allPill = document.createElement('button');
+    allPill.className = 'btn btn-sm ' + (activeTagFilter === null ? 'btn-primary' : 'btn-outline');
+    allPill.style.borderRadius = '20px';
+    allPill.style.padding = '2px 10px';
+    allPill.style.fontSize = '12px';
+    allPill.textContent = 'All';
+    allPill.addEventListener('click', () => {
+      activeTagFilter = null;
+      renderTasks();
+    });
+    container.appendChild(allPill);
+
+    // Tag pills
+    Array.from(tags).sort().forEach(tag => {
+      const pill = document.createElement('button');
+      pill.className = 'btn btn-sm ' + (activeTagFilter === tag ? 'btn-primary' : 'btn-outline');
+      pill.style.borderRadius = '20px';
+      pill.style.padding = '2px 10px';
+      pill.style.fontSize = '12px';
+      pill.textContent = '#' + tag;
+      pill.addEventListener('click', () => {
+        activeTagFilter = tag;
+        renderTasks();
+      });
+      container.appendChild(pill);
+    });
+  }
+
   function renderTasks() {
     const printDate = document.getElementById('print-date');
     if (printDate) printDate.textContent = "Role: " + (ROLE_LABELS[currentRole] || currentRole) + " | Date: " + new Date().toLocaleDateString();
     taskList.innerHTML = '';
+
     const roleTasks = tasks[currentRole] || [];
+    renderTagFilters(roleTasks);
+
     let toShow = currentFreq === 'all' ? roleTasks : roleTasks.filter(t => t.freq === currentFreq);
+
+    if (activeTagFilter) {
+      toShow = toShow.filter(t => t.tag && t.tag.toLowerCase() === activeTagFilter);
+    }
+
 
     // Apply search filter
     const searchInput = document.getElementById('search-input');
@@ -631,6 +745,7 @@
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
       currentRole = tab.dataset.role;
+      activeTagFilter = null;
       renderTasks();
     });
   });
@@ -1056,6 +1171,38 @@
     updatePomoDisplay();
   }
 
+
+  // ---------- Keyboard Shortcuts ----------
+  window.addEventListener('keydown', (e) => {
+    // Check if user is typing in an input
+    const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
+    // Ctrl/Cmd + F to focus search
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) searchInput.focus();
+    }
+
+    // Escape to clear search or scratchpad focus
+    if (e.key === 'Escape') {
+      const searchInput = document.getElementById('search-input');
+      if (document.activeElement === searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+        renderTasks();
+      } else {
+        document.activeElement.blur();
+      }
+    }
+
+    // Ctrl/Cmd + N to focus Add Task
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      if (taskInput) taskInput.focus();
+    }
+  });
+
   // ---------- Theme Toggle ----------
   (function initTheme() {
     const toggle = $('[data-theme-toggle]');
@@ -1224,6 +1371,7 @@
 
   // ---------- Init ----------
   loadTasks();
+  checkRecurringResets();
   updateAnalytics();
   renderTasks();
   setTimeout(checkUrlImport, 300);
