@@ -241,3 +241,30 @@ Anambra State, Nigeria
 *No account needed · Data stays on your device · Works offline · 100% free*
 
 </div>
+
+---
+
+## Privacy-preserving Analytics
+
+EduPlanner supports optional, privacy-focused analytics to help developers understand usage while respecting users.
+
+By default, no data leaves the browser. To enable tracking:
+1. Copy \`config.example.js\` to \`config.js\`.
+2. Edit \`config.js\` and set \`ANALYTICS_ENABLED: true\`.
+3. Add your **Cloudflare Web Analytics** token or **PostHog** Project API Key.
+
+**What we track:**
+- Page views (e.g., viewing Home).
+- Basic application events (e.g., \`task_create\`, \`task_complete\`, \`export_data\`).
+- UI interactions (e.g., theme toggle, role switching).
+
+**What we NEVER track (Strict Privacy Promise):**
+- Personal identifiers (Names, emails, IDs).
+- The text content of your tasks or notes.
+- IP Addresses (Cloudflare and PostHog are configured not to log IPs).
+- Cross-site tracking cookies.
+
+**Offline Support:**
+EduPlanner queues analytics events when offline and securely flushes them once reconnected. No data is lost when used as an offline PWA.
+
+To disable analytics completely, either do not provide a \`config.js\` file, set \`ANALYTICS_ENABLED: false\`, or use your browser's "Do Not Track" / Global Privacy Control features.
