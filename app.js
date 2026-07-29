@@ -421,6 +421,7 @@
         // Checkbox event
         item.querySelector('.task-checkbox').addEventListener('change', (e) => {
           t.done = e.target.checked;
+          if (window.Analytics) window.Analytics.track(t.done ? 'task_complete' : 'task_uncomplete', { role: currentRole, frequency: t.freq });
           if (t.done) {
             item.classList.add('done');
           } else {
@@ -461,6 +462,7 @@
           saveArchive();
 
           tasks[currentRole] = tasks[currentRole].filter(x => x.id !== t.id);
+          if (window.Analytics) window.Analytics.track('task_delete', { role: currentRole });
           item.style.opacity = '0';
           setTimeout(() => {
             saveTasks();
@@ -535,6 +537,7 @@
     const cb = div.querySelector('.task-checkbox');
     cb.addEventListener('change', () => {
       task.done = cb.checked;
+      if (window.Analytics) window.Analytics.track(task.done ? 'task_complete' : 'task_uncomplete', { role: currentRole, frequency: task.freq });
       saveTasks();
       renderTasks();
     });
@@ -745,6 +748,7 @@
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
       currentRole = tab.dataset.role;
+      if (window.Analytics) window.Analytics.track('planner_view', { role: currentRole, frequency: currentFreq });
       activeTagFilter = null;
       renderTasks();
     });
@@ -760,6 +764,7 @@
       tab.classList.add('active');
       tab.setAttribute('aria-selected', 'true');
       currentFreq = tab.dataset.freq;
+      if (window.Analytics) window.Analytics.track('planner_view', { role: currentRole, frequency: currentFreq });
       taskFreqSelect.value = currentFreq === 'all' ? 'daily' : currentFreq;
       renderTasks();
     });
@@ -775,6 +780,7 @@
 
     const freq = taskFreqSelect.value;
     if (!tasks[currentRole]) tasks[currentRole] = [];
+    if (window.Analytics) window.Analytics.track('task_create', { role: currentRole, frequency: newFreq });
     tasks[currentRole].push({
       id: uid(),
       text,
@@ -828,6 +834,7 @@
 
   // ---------- Export: PDF ----------
   $('#export-pdf').addEventListener('click', () => {
+    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'pdf', role: currentRole });
     const roleTasks = tasks[currentRole] || [];
     if (roleTasks.length === 0) {
       showToast('No tasks to export');
@@ -910,6 +917,7 @@
 
   // ---------- Export: Excel ----------
   $('#export-excel').addEventListener('click', () => {
+    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'excel', role: currentRole });
     const roleTasks = tasks[currentRole] || [];
     if (roleTasks.length === 0) {
       showToast('No tasks to export');
@@ -963,6 +971,7 @@
 
   // ---------- Export: JSON Backup ----------
   $('#export-backup').addEventListener('click', () => {
+    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'backup', role: currentRole });
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tasks));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
@@ -1036,10 +1045,12 @@
     const savedLang = localStorage.getItem('eduplanner_lang') || 'en';
     langSelect.value = savedLang;
     applyLanguage(savedLang);
+    if (window.Analytics) { window.Analytics.track('app_open', { app_version: '1.0.0' }); window.Analytics.page('Home'); }
 
     langSelect.addEventListener('change', (e) => {
       const lang = e.target.value;
       localStorage.setItem('eduplanner_lang', lang);
+    if (window.Analytics) window.Analytics.track('settings_change', { setting_key: 'language' });
       applyLanguage(lang);
     });
   }
@@ -1216,6 +1227,7 @@
       theme = theme === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', theme);
       localStorage.setItem('eduplanner_theme', theme);
+    if (window.Analytics) window.Analytics.track('theme_change', { theme_name: theme });
       toggle.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' mode');
       updateToggleIcon(toggle, theme);
     });
