@@ -285,4 +285,4 @@ EduPlanner is developed and maintained by **Harmony Digital Consults Ltd** (Nige
 
 All contributions are licensed under the project's existing [MIT License](LICENSE). By submitting a contribution, you agree that your work may be distributed under those terms.
 
-Questions? Reach us at **eziekechukwuemerie@gmail.com**.
+Questions? Reach us at **info@harmonydigitalconsults.com.ng**.
