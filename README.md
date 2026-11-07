@@ -267,11 +267,11 @@ Anambra State, Nigeria
 
 EduPlanner supports optional, privacy-focused analytics to help developers understand usage while respecting users.
 
-**The hosted site** (eduplanner.harmonydigitalconsults.com.ng) has anonymous analytics turned on, using Cloudflare Web Analytics and PostHog. Nothing is sent if your browser has "Do Not Track" or Global Privacy Control turned on.
+**Analytics is opt-in.** On the hosted site (eduplanner.harmonydigitalconsults.com.ng), nothing is loaded or sent until you click **Allow** on the usage-stats banner. You can change your choice any time with the **Usage stats** switch in the footer. If your browser has "Do Not Track" or Global Privacy Control turned on, the banner never appears and nothing is sent.
 
 **Self-hosting:** analytics are controlled by `config.js`:
 1. Copy `config.example.js` to `config.js`.
-2. Set `ANALYTICS_ENABLED: true` (or `false` to send nothing).
+2. Set `ANALYTICS_ENABLED: true` to offer the opt-in banner (or `false` to remove analytics entirely).
 3. Add your **Cloudflare Web Analytics** token and/or **PostHog** Project API Key.
 
 **What we track:**
@@ -286,6 +286,6 @@ EduPlanner supports optional, privacy-focused analytics to help developers under
 - Cross-site tracking cookies.
 
 **Offline Support:**
-EduPlanner queues analytics events when offline and securely flushes them once reconnected. No data is lost when used as an offline PWA.
+For users who opted in, EduPlanner queues analytics events when offline and securely flushes them once reconnected. No data is lost when used as an offline PWA.
 
 To disable analytics completely, either do not provide a `config.js` file, set `ANALYTICS_ENABLED: false`, or use your browser's "Do Not Track" / Global Privacy Control features.

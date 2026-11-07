@@ -1336,6 +1336,38 @@
     if (outcome === 'accepted') showToast('App installed');
   });
 
+  // ---------- Analytics consent (opt-in) ----------
+  (function initAnalyticsConsent() {
+    const A = window.Analytics;
+    if (!A || !A.isAvailable || !A.isAvailable()) return; // not configured, or DNT/GPC set
+
+    const banner = $('#consent-banner');
+    const toggle = $('#analytics-toggle');
+    $$('[data-analytics-only]').forEach(el => { el.hidden = false; });
+
+    function refresh() {
+      const consent = A.getConsent();
+      if (toggle) toggle.textContent = 'Usage stats: ' + (consent === 'granted' ? 'On' : 'Off');
+      if (banner) banner.hidden = consent !== null;
+    }
+
+    function choose(granted) {
+      A.setConsent(granted);
+      refresh();
+      if (granted) A.track('settings_change', { setting_key: 'analytics_consent' });
+      showToast(granted ? 'Thanks! Anonymous usage stats are on.' : 'Usage stats are off.');
+    }
+
+    if (banner) {
+      $('#consent-accept').addEventListener('click', () => choose(true));
+      $('#consent-decline').addEventListener('click', () => choose(false));
+    }
+    if (toggle) {
+      toggle.addEventListener('click', () => choose(A.getConsent() !== 'granted'));
+    }
+    refresh();
+  })();
+
   // ---------- Service Worker ----------
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

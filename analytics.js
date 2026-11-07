@@ -50,7 +50,22 @@
         if (IS_DEBUG) console.info('[Analytics] Disabled via Do Not Track (DNT) / GPC.');
     }
 
-    const SHOULD_TRACK = IS_ENABLED && !doNotTrack;
+    // Analytics is opt-in: nothing is loaded or sent until the user agrees.
+    // AVAILABLE = the site has analytics configured and the browser allows it.
+    const AVAILABLE = IS_ENABLED && !doNotTrack;
+    const CONSENT_KEY = 'eduplanner_analytics_consent'; // 'granted' | 'denied'
+
+    function readConsent() {
+        try {
+            const v = localStorage.getItem(CONSENT_KEY);
+            return v === 'granted' || v === 'denied' ? v : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    let SHOULD_TRACK = AVAILABLE && readConsent() === 'granted';
+    let started = false;
 
     // Load queue from localStorage
     function loadQueue() {
@@ -166,8 +181,8 @@
         }
     }
 
-    // Cloudflare Web Analytics beacon: only loaded when tracking is allowed
-    // (config enabled and no Do Not Track / Global Privacy Control).
+    // Cloudflare Web Analytics beacon: only loaded once the user has opted in
+    // (and analytics is enabled with no Do Not Track / Global Privacy Control).
     function initCloudflare() {
         if (!config.CLOUDFLARE_TOKEN) return;
         const s = document.createElement('script');
@@ -177,18 +192,44 @@
         document.head.appendChild(s);
     }
 
+    function start() {
+        if (!SHOULD_TRACK) return;
+        if (started) {
+            if (window.posthog && window.posthog.opt_in_capturing) window.posthog.opt_in_capturing();
+            return;
+        }
+        started = true;
+        initPostHog();
+        initCloudflare();
+
+        window.addEventListener('online', flushQueue);
+
+        // Flush anything stuck in queue initially (if online)
+        setTimeout(flushQueue, 1000);
+    }
+
     // Public API
     window.Analytics = {
-        init: function() {
+        init: start,
+        // True when the site has analytics configured and the browser
+        // has not set Do Not Track / Global Privacy Control.
+        isAvailable: function() {
+            return AVAILABLE;
+        },
+        // 'granted', 'denied', or null if the user hasn't chosen yet
+        getConsent: readConsent,
+        setConsent: function(granted) {
+            try {
+                localStorage.setItem(CONSENT_KEY, granted ? 'granted' : 'denied');
+            } catch (e) { /* storage blocked: choice lasts for this page only */ }
+            SHOULD_TRACK = AVAILABLE && granted === true;
             if (SHOULD_TRACK) {
-                initPostHog();
-                initCloudflare();
-
-                window.addEventListener('online', flushQueue);
-
-                // Flush anything stuck in queue initially (if online)
-                setTimeout(flushQueue, 1000);
+                start();
+            } else {
+                saveQueue([]);
+                if (window.posthog && window.posthog.opt_out_capturing) window.posthog.opt_out_capturing();
             }
+            if (IS_DEBUG) console.info('[Analytics] Consent ' + (granted ? 'granted' : 'denied'));
         },
         track: function(eventName, properties = {}) {
             enqueueEvent(eventName, properties);
