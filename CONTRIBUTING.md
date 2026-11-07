@@ -212,8 +212,8 @@ Before opening a Pull Request, run through these checks manually:
 
 ### Opening a Pull Request
 
-1. Ensure your branch is up to date with `main`.
-2. Open a PR against the `main` branch of the upstream repository.
+1. Ensure your branch is up to date with `master`.
+2. Open a PR against the `master` branch of the upstream repository.
 3. Fill in the [Pull Request template](.github/PULL_REQUEST_TEMPLATE.md) completely.
 4. Link any issues your PR closes (e.g., `Closes #42`).
 5. A maintainer will review your PR, leave feedback if needed, and merge once it is ready.

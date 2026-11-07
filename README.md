@@ -115,7 +115,7 @@ Or simply open `index.html` directly in your browser.
 
 1. Fork this repository
 2. Go to **Settings → Pages**
-3. Set source to `main` branch, root folder
+3. Set source to `master` branch, root folder
 4. Your app will be live at `https://yourusername.github.io/eduplanner`
 
 ### Deploy to Netlify / Vercel
