@@ -154,7 +154,8 @@
 
             posthog.init(config.POSTHOG_PROJECT_API_KEY, {
                 api_host: config.POSTHOG_HOST || 'https://eu.i.posthog.com',
-                person_profiles: 'always',
+                // Events stay anonymous: no person profiles are created
+                person_profiles: 'identified_only',
                 autocapture: false,
                 capture_pageview: false,
                 capture_pageleave: false,
@@ -162,11 +163,18 @@
                 opt_out_capturing_by_default: !SHOULD_TRACK
             });
 
-            if (SHOULD_TRACK) {
-                // Ensure identity is purely anonymous (no user details)
-                posthog.identify(posthog.get_distinct_id());
-            }
         }
+    }
+
+    // Cloudflare Web Analytics beacon: only loaded when tracking is allowed
+    // (config enabled and no Do Not Track / Global Privacy Control).
+    function initCloudflare() {
+        if (!config.CLOUDFLARE_TOKEN) return;
+        const s = document.createElement('script');
+        s.defer = true;
+        s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+        s.setAttribute('data-cf-beacon', JSON.stringify({ token: config.CLOUDFLARE_TOKEN }));
+        document.head.appendChild(s);
     }
 
     // Public API
@@ -174,6 +182,7 @@
         init: function() {
             if (SHOULD_TRACK) {
                 initPostHog();
+                initCloudflare();
 
                 window.addEventListener('online', flushQueue);
 

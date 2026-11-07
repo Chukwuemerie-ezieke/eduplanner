@@ -209,7 +209,7 @@
   // ---------- Recurring Task Auto-Reset ----------
   function checkRecurringResets() {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = localDateStr(now);
     const currentWeekStr = getWeekYearString(now);
     const currentMonthStr = now.getFullYear() + '-' + now.getMonth();
 
@@ -301,6 +301,58 @@
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // YYYY-MM-DD in the user's local time zone (toISOString() would use UTC)
+  function localDateStr(date) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+  }
+
+  // ---------- Validation for untrusted data (backups, shared links) ----------
+  const FREQS = ['daily', 'weekly', 'monthly'];
+  const FORBIDDEN_KEYS = ['__proto__', 'constructor', 'prototype'];
+  function isSafeRoleKey(k) {
+    return typeof k === 'string' && k.length > 0 && k.length <= 80 && !FORBIDDEN_KEYS.includes(k);
+  }
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // Returns a clean task object, or null if the input is not a usable task.
+  function sanitizeTask(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const text = typeof raw.text === 'string' ? raw.text.trim().slice(0, 500) : '';
+    if (!text) return null;
+    const subtasks = Array.isArray(raw.subtasks)
+      ? raw.subtasks
+          .filter(st => st && typeof st.text === 'string' && st.text.trim())
+          .slice(0, 50)
+          .map(st => ({ text: st.text.trim().slice(0, 300), done: st.done === true }))
+      : [];
+    return {
+      id: uid(),
+      text,
+      freq: FREQS.includes(raw.freq) ? raw.freq : 'daily',
+      dueDate: typeof raw.dueDate === 'string' && DATE_RE.test(raw.dueDate) ? raw.dueDate : null,
+      tag: typeof raw.tag === 'string' && raw.tag.trim() ? raw.tag.trim().slice(0, 40) : null,
+      subtasks,
+      done: raw.done === true
+    };
+  }
+
+  function sanitizeTaskList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(sanitizeTask).filter(Boolean);
+  }
+
+  // Validates a full backup ({ role: [tasks] }). Returns null if invalid.
+  function sanitizeBackup(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    const clean = {};
+    for (const role of Object.keys(data)) {
+      if (!isSafeRoleKey(role) || !Array.isArray(data[role])) return null;
+      clean[role] = sanitizeTaskList(data[role]);
+    }
+    return Object.keys(clean).length ? clean : null;
   }
 
   // ---------- Render ----------
@@ -407,11 +459,22 @@
             <label for="${checkId}" class="task-text">${parseMarkdown(t.text)}</label>
 
             ${currentFreq === 'all' ? `<div class="task-freq-badge ${t.freq}">${t.freq}</div>` : ''}
-            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;display:inline-block;">Due: ${t.dueDate}</div>` : ''}
+            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;display:inline-block;">Due: ${escHtml(t.dueDate)}</div>` : ''}
             ${t.tag ? `<span class="task-tag" style="font-size:10px; background:var(--color-surface-2); border: 1px solid var(--color-border); padding:2px 6px; border-radius:4px; margin-left: 6px; display:inline-block;">${escHtml(t.tag)}</span>` : ''}
+            ${Array.isArray(t.subtasks) && t.subtasks.length ? `
+            <ul class="subtask-list" style="list-style:none; margin:6px 0 0; padding:0;">
+              ${t.subtasks.map((st, sidx) => `
+              <li style="display:flex; align-items:center; gap:6px; font-size:13px;">
+                <input type="checkbox" class="subtask-check" id="${checkId}-st${sidx}" data-sidx="${sidx}" ${st.done ? 'checked' : ''}>
+                <label for="${checkId}-st${sidx}" style="${st.done ? 'text-decoration:line-through; opacity:0.6;' : ''}">${escHtml(st.text)}</label>
+              </li>`).join('')}
+            </ul>` : ''}
           </div>
 
           <div class="task-actions">
+            <button class="add-subtask-btn" aria-label="Add subtask" title="Add subtask" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
             <button class="task-delete" aria-label="Delete task">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
@@ -435,7 +498,7 @@
         // Subtask events
         item.querySelectorAll('.subtask-check').forEach(cb => {
           cb.addEventListener('change', (e) => {
-            const sidx = e.target.getAttribute('data-sidx');
+            const sidx = Number(e.target.getAttribute('data-sidx'));
             t.subtasks[sidx].done = e.target.checked;
             saveTasks();
             renderTasks();
@@ -514,51 +577,6 @@
     updateStats();
   }
 
-  function createTaskEl(task) {
-    const div = document.createElement('div');
-    div.className = 'task-item' + (task.done ? ' done' : '');
-    div.setAttribute('role', 'listitem');
-    div.dataset.id = task.id;
-
-    div.innerHTML = `
-      <input type="checkbox" class="task-checkbox" ${task.done ? 'checked' : ''} aria-label="Mark task as ${task.done ? 'incomplete' : 'complete'}">
-      <div class="task-content">
-        <div class="task-text">${escHtml(task.text)}</div>
-        ${currentFreq === 'all' ? `<span class="task-freq-badge ${task.freq}">${task.freq}</span>` : ''}
-      </div>
-      <div class="task-actions">
-        <button class="task-delete" aria-label="Delete task" title="Delete task">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-    `;
-
-    // Checkbox
-    const cb = div.querySelector('.task-checkbox');
-    cb.addEventListener('change', () => {
-      task.done = cb.checked;
-      if (window.Analytics) window.Analytics.track(task.done ? 'task_complete' : 'task_uncomplete', { role: currentRole, frequency: task.freq });
-      saveTasks();
-      renderTasks();
-    });
-
-    // Delete
-    const delBtn = div.querySelector('.task-delete');
-    delBtn.addEventListener('click', () => {
-      const roleTasks = tasks[currentRole];
-      const idx = roleTasks.findIndex(t => t.id === task.id);
-      if (idx > -1) {
-        roleTasks.splice(idx, 1);
-        saveTasks();
-        renderTasks();
-        showToast('Task removed');
-      }
-    });
-
-    return div;
-  }
-
-
   function updateAnalytics() {
     let total = 0;
     let done = 0;
@@ -610,14 +628,18 @@
   // Create tabs for custom roles
   const tabsScroll = document.querySelector('.tabs-scroll');
   const addRoleBtn = document.getElementById('add-role-btn');
-  for (const [key, label] of Object.entries(customRoles)) {
+  function addRoleTab(key, label) {
     const btn = document.createElement('button');
     btn.className = 'tab';
     btn.dataset.role = key;
     btn.setAttribute('role', 'tab');
     btn.setAttribute('aria-selected', 'false');
-    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${label}`;
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${escHtml(label)}`;
     tabsScroll.insertBefore(btn, addRoleBtn);
+    return btn;
+  }
+  for (const [key, label] of Object.entries(customRoles)) {
+    if (isSafeRoleKey(key) && typeof label === 'string') addRoleTab(key, label);
   }
 
 
@@ -717,7 +739,11 @@
     $('#add-role-btn').addEventListener('click', () => {
       const roleName = prompt("Enter the name of the new role (e.g., 'Sports Coordinator'):");
       if (roleName && roleName.trim() !== '') {
-        const roleKey = roleName.trim().toLowerCase().replace(/\s+/g, '_');
+        const roleKey = roleName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+        if (!roleKey || !isSafeRoleKey(roleKey)) {
+           showToast('Please use letters or numbers in the role name');
+           return;
+        }
         if (ROLE_LABELS[roleKey]) {
            showToast('Role already exists');
            return;
@@ -730,28 +756,26 @@
         tasks[roleKey] = [];
         saveTasks();
 
-        // Reload page to re-bind events to new tabs easily
-        location.reload();
+        addRoleTab(roleKey, roleName.trim()).click();
+        showToast('Role added');
       }
     });
   }
 
-  // Role tabs event delegation (since new tabs might be added dynamically, but reload handles it)
-
-  // Role tabs
-  $$('.tab[data-role]').forEach(tab => {
-    tab.addEventListener('click', () => {
-      $$('.tab[data-role]').forEach(t => {
-        t.classList.remove('active');
-        t.setAttribute('aria-selected', 'false');
-      });
-      tab.classList.add('active');
-      tab.setAttribute('aria-selected', 'true');
-      currentRole = tab.dataset.role;
-      if (window.Analytics) window.Analytics.track('planner_view', { role: currentRole, frequency: currentFreq });
-      activeTagFilter = null;
-      renderTasks();
+  // Role tabs (delegated, so tabs added at runtime work without a reload)
+  tabsScroll.addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab[data-role]');
+    if (!tab) return;
+    $$('.tab[data-role]').forEach(t => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
     });
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+    currentRole = tab.dataset.role;
+    if (window.Analytics) window.Analytics.track('planner_view', { role: currentRole, frequency: currentFreq });
+    activeTagFilter = null;
+    renderTasks();
   });
 
   // Frequency tabs
@@ -780,7 +804,7 @@
 
     const freq = taskFreqSelect.value;
     if (!tasks[currentRole]) tasks[currentRole] = [];
-    if (window.Analytics) window.Analytics.track('task_create', { role: currentRole, frequency: newFreq });
+    if (window.Analytics) window.Analytics.track('task_create', { role: currentRole, frequency: freq });
     tasks[currentRole].push({
       id: uid(),
       text,
@@ -855,7 +879,7 @@
     const groupedHtml = buildGroupedHtml(roleTasks, roleName, dateStr);
 
     printWin.document.write(`<!DOCTYPE html>
-<html><head><title>EduPlanner - ${roleName} Tasks</title>
+<html><head><title>EduPlanner - ${escHtml(roleName)} Tasks</title>
 <style>
   @import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -880,7 +904,7 @@
       <div class="pdf-brand-sub">Harmony Digital Consults Ltd</div>
     </div>
     <div class="pdf-meta">
-      <div class="pdf-role">${roleName} Task Report</div>
+      <div class="pdf-role">${escHtml(roleName)} Task Report</div>
       <div>Generated: ${dateStr}</div>
     </div>
   </div>
@@ -994,14 +1018,25 @@
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const importedTasks = JSON.parse(event.target.result);
-        if (typeof importedTasks === 'object' && importedTasks !== null) {
+        const importedTasks = sanitizeBackup(JSON.parse(event.target.result));
+        if (!importedTasks) throw new Error('Invalid format');
+        const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
+        if (confirm(`Restore ${count} task(s) from this backup? This replaces all your current tasks.`)) {
           tasks = importedTasks;
+          // Make sure every restored role has a tab
+          for (const role of Object.keys(tasks)) {
+            if (!ROLE_LABELS[role]) {
+              const label = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              ROLE_LABELS[role] = label;
+              customRoles[role] = label;
+              addRoleTab(role, label);
+            }
+          }
+          localStorage.setItem('eduplanner_custom_roles', JSON.stringify(customRoles));
           saveTasks();
+          updateAnalytics();
           renderTasks();
           showToast('Backup restored successfully');
-        } else {
-          throw new Error('Invalid format');
         }
       } catch (err) {
         showToast('Error restoring backup. Invalid file.');
@@ -1058,10 +1093,11 @@
 
   // ---------- Notifications ----------
   const notifsBtn = document.getElementById('enable-notifs-btn');
-  if (notifsBtn) {
+  const hasNotifications = typeof window.Notification !== "undefined";
+  if (notifsBtn && !hasNotifications) notifsBtn.style.display = "none";
+  if (notifsBtn && hasNotifications) {
     if (Notification.permission === 'granted') {
       notifsBtn.style.display = 'none';
-      checkDueTasks();
     }
 
     notifsBtn.addEventListener('click', () => {
@@ -1078,9 +1114,9 @@
   }
 
   function checkDueTasks() {
-    if (Notification.permission !== 'granted') return;
+    if (!hasNotifications || Notification.permission !== "granted") return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateStr(new Date());
     let dueCount = 0;
 
     // Check all roles
@@ -1163,7 +1199,7 @@
             pomoRunning = false;
             pomoStart.textContent = '▶';
             showToast('Time is up! Take a break.');
-            if (Notification.permission === 'granted') {
+            if (hasNotifications && Notification.permission === "granted") {
               new Notification('EduPlanner Timer', { body: 'Time is up! Take a 5 minute break.', icon: 'icons/icon-192.png' });
             }
           }
@@ -1337,18 +1373,17 @@
     if (importData) {
       try {
         const decoded = JSON.parse(decodeURIComponent(atob(importData)));
-        if (decoded && decoded.role && Array.isArray(decoded.data)) {
-          if (confirm(`Import ${decoded.data.length} tasks into the "${ROLE_LABELS[decoded.role] || decoded.role}" role?`)) {
+        const importedList = decoded ? sanitizeTaskList(decoded.data) : [];
+        if (decoded && isSafeRoleKey(decoded.role) && importedList.length) {
+          if (confirm(`Import ${importedList.length} tasks into the "${ROLE_LABELS[decoded.role] || decoded.role}" role?`)) {
 
             if (!tasks[decoded.role]) tasks[decoded.role] = [];
 
             // Append imported tasks, avoiding identical duplicates by text
             let addedCount = 0;
-            decoded.data.forEach(importedTask => {
+            importedList.forEach(importedTask => {
               const exists = tasks[decoded.role].find(t => t.text === importedTask.text);
               if (!exists) {
-                // Generate fresh ID so it doesn't conflict
-                importedTask.id = uid();
                 tasks[decoded.role].push(importedTask);
                 addedCount++;
               }
@@ -1360,12 +1395,16 @@
             window.history.replaceState({}, document.title, window.location.pathname);
 
             // Switch to that role tab
-            const targetTab = document.querySelector(`.tab[data-role="${decoded.role}"]`);
-            if (targetTab) targetTab.click();
-            else {
-                currentRole = decoded.role;
-                renderTasks();
+            let targetTab = Array.from($$('.tab[data-role]')).find(t => t.dataset.role === decoded.role);
+            if (!targetTab) {
+              const label = decoded.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              ROLE_LABELS[decoded.role] = label;
+              customRoles[decoded.role] = label;
+              localStorage.setItem('eduplanner_custom_roles', JSON.stringify(customRoles));
+              targetTab = addRoleTab(decoded.role, label);
             }
+            targetTab.click();
+            updateAnalytics();
 
             setTimeout(() => {
                 showToast(`Imported ${addedCount} new tasks successfully.`);
@@ -1386,6 +1425,7 @@
   checkRecurringResets();
   updateAnalytics();
   renderTasks();
+  checkDueTasks();
   setTimeout(checkUrlImport, 300);
 
 })();
