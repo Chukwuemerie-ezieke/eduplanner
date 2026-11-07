@@ -24,7 +24,7 @@
   <!-- Cloudflare Web Analytics is loaded by analytics.js only when allowed (see config.js) -->
 </head>
 <body>
-  <a href="#main-content" class="skip-link">Skip to content</a>
+  <a href="#main-content" class="skip-link" data-i18n="skipToContent">Skip to content</a>
 
   <!-- Header -->
   <header class="header" role="banner">
@@ -38,7 +38,7 @@
         </svg>
         <div class="brand-text">
           <span class="brand-name">EduPlanner</span>
-          <span class="brand-sub">by Harmony Digital Consults</span>
+          <span class="brand-sub" data-i18n="brandSub">by Harmony Digital Consults</span>
         </div>
       </div>
       <div class="header-actions">
@@ -46,25 +46,25 @@
         <div id="pomodoro-timer" style="display: flex; align-items: center; gap: 8px; margin-right: 15px; background: var(--color-surface-2); padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 14px; border: 1px solid var(--color-border);">
           <span>⏱️</span>
           <span id="pomodoro-display">25:00</span>
-          <button id="pomodoro-start" style="background: transparent; border: none; cursor: pointer; color: var(--color-primary); padding: 0;">▶</button>
-          <button id="pomodoro-reset" style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 0;">↺</button>
+          <button id="pomodoro-start" aria-label="Start or pause focus timer" data-i18n-aria-label="timerStart" style="background: transparent; border: none; cursor: pointer; color: var(--color-primary); padding: 0;">▶</button>
+          <button id="pomodoro-reset" aria-label="Reset focus timer" data-i18n-aria-label="timerReset" style="background: transparent; border: none; cursor: pointer; color: var(--color-text-muted); padding: 0;">↺</button>
         </div>
 
-        <button id="install-btn" class="btn btn-outline btn-sm" style="display:none" aria-label="Install app">
+        <button id="install-btn" class="btn btn-outline btn-sm" style="display:none" aria-label="Install app" data-i18n-aria-label="installApp">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Install
+          <span data-i18n="install">Install</span>
         </button>
 
-        <select id="lang-select" class="btn btn-outline btn-sm" aria-label="Select Language">
-          <option value="en">EN</option>
-          <option value="fr">FR</option>
+        <select id="lang-select" class="btn btn-outline btn-sm" aria-label="Select language" data-i18n-aria-label="selectLanguage">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
           <option value="pidgin">Pidgin</option>
         </select>
 
 
         <button class="btn btn-outline" id="enable-notifs-btn" style="margin-left:auto;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-          Enable Reminders
+          <span data-i18n="enableReminders">Enable Reminders</span>
         </button>
         <button data-theme-toggle aria-label="Switch to dark mode" class="btn-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -82,48 +82,46 @@
     </section>
 
     <!-- Role Selector Tabs -->
-    <nav class="role-tabs" aria-label="Role selection">
-      <div class="tabs-scroll">
+    <nav class="role-tabs" aria-label="Role selection" data-i18n-aria-label="roleSelection">
+      <div class="tabs-scroll" role="tablist">
         <button class="tab active" data-role="teacher" aria-selected="true" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          Teacher
+          <span data-i18n="role.teacher">Teacher</span>
         </button>
         <button class="tab" data-role="administrator" aria-selected="false" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Administrator
+          <span data-i18n="role.administrator">Administrator</span>
         </button>
         <button class="tab" data-role="hod" aria-selected="false" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Head of Dept
+          <span data-i18n="roleTab.hod">Head of Dept</span>
         </button>
         <button class="tab" data-role="ict" aria-selected="false" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          ICT Coordinator
+          <span data-i18n="role.ict">ICT Coordinator</span>
         </button>
         <button class="tab" data-role="librarian" aria-selected="false" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Librarian
+          <span data-i18n="role.librarian">Librarian</span>
         </button>
         <button class="tab" data-role="counselor" aria-selected="false" role="tab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-          Counselor
+          <span data-i18n="roleTab.counselor">Counselor</span>
         </button>
 
-        <button class="tab" id="add-role-btn" aria-selected="false" role="tab" style="font-weight:bold; color:var(--color-primary);">
-          + Add Role
-        </button>
+        <button class="tab" id="add-role-btn" aria-selected="false" role="tab" style="font-weight:bold; color:var(--color-primary);" data-i18n="addRole">+ Add Role</button>
       </div>
     </nav>
 
 
       <div class="analytics-card" style="margin: 20px 0; padding: 15px; background: var(--color-surface-2); border-radius: 8px; border: 1px solid var(--color-border); text-align: center;">
-        <h3 style="font-size: 14px; margin-bottom: 5px;">Your Productivity</h3>
+        <h3 style="font-size: 14px; margin-bottom: 5px;" data-i18n="productivityTitle">Your Productivity</h3>
         <p style="font-size: 24px; font-weight: bold; color: var(--color-primary);" id="productivity-score">0%</p>
-        <p style="font-size: 12px; color: var(--color-text-muted);">Overall Task Completion</p>
+        <p style="font-size: 12px; color: var(--color-text-muted);" data-i18n="productivitySub">Overall Task Completion</p>
       </div>
       <!-- Task Workspace -->
     <div class="print-header" style="display:none">
-      <h2>EduPlanner - Task Report</h2>
+      <h2>EduPlanner - <span data-i18n="taskReport">Task Report</span></h2>
       <p id="print-date"></p>
     </div>
     <!-- Data safety notice (backup reminders, storage problems) -->
@@ -139,14 +137,14 @@
     <div class="workspace">
       <!-- Frequency Filter -->
       <div class="freq-bar">
-        <div class="freq-tabs" role="tablist" aria-label="Task frequency">
-          <button class="freq-tab active" data-freq="daily" role="tab" aria-selected="true">Daily</button>
-          <button class="freq-tab" data-freq="weekly" role="tab" aria-selected="false">Weekly</button>
-          <button class="freq-tab" data-freq="monthly" role="tab" aria-selected="false">Monthly</button>
-          <button class="freq-tab" data-freq="all" role="tab" aria-selected="false">All</button>
+        <div class="freq-tabs" role="tablist" aria-label="Task frequency" data-i18n-aria-label="taskFrequency">
+          <button class="freq-tab active" data-freq="daily" role="tab" aria-selected="true" data-i18n="daily">Daily</button>
+          <button class="freq-tab" data-freq="weekly" role="tab" aria-selected="false" data-i18n="weekly">Weekly</button>
+          <button class="freq-tab" data-freq="monthly" role="tab" aria-selected="false" data-i18n="monthly">Monthly</button>
+          <button class="freq-tab" data-freq="all" role="tab" aria-selected="false" data-i18n="all">All</button>
         </div>
         <div class="task-stats">
-          <span class="stat-done" id="stat-done">0</span>/<span id="stat-total">0</span> done
+          <span class="stat-done" id="stat-done">0</span>/<span id="stat-total">0</span> <span data-i18n="statsDone">done</span>
         </div>
       </div>
 
@@ -159,32 +157,32 @@
 
       <!-- Add Task -->
       <form class="add-task-form" id="add-task-form">
-        <label for="new-task-input" class="sr-only">Add a new task</label>
-        <input type="text" id="new-task-input" class="task-input" placeholder="Add a new task..." required autocomplete="off" maxlength="200">
+        <label for="new-task-input" class="sr-only" data-i18n="addTaskLabel">Add a new task</label>
+        <input type="text" id="new-task-input" class="task-input" placeholder="Add a new task..." data-i18n-placeholder="addTaskPlaceholder" required autocomplete="off" maxlength="200">
 
 
-        <label for="new-task-tag" class="sr-only">Tag (Optional)</label>
-        <input type="text" id="new-task-tag" class="task-input" placeholder="#tag" style="max-width: 100px;" aria-label="Task tag">
-        <label for="new-task-date" class="sr-only">Due Date</label>
-        <input type="date" id="new-task-date" class="task-input" style="max-width: 140px;" aria-label="Task due date">
-        <select id="new-task-freq" class="task-select" aria-label="Task frequency">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
+        <label for="new-task-tag" class="sr-only" data-i18n="tagLabel">Tag (optional)</label>
+        <input type="text" id="new-task-tag" class="task-input" placeholder="#tag" style="max-width: 100px;" aria-label="Tag (optional)" data-i18n-aria-label="tagLabel">
+        <label for="new-task-date" class="sr-only" data-i18n="dueDateLabel">Due date</label>
+        <input type="date" id="new-task-date" class="task-input" style="max-width: 140px;" aria-label="Due date" data-i18n-aria-label="dueDateLabel">
+        <select id="new-task-freq" class="task-select" aria-label="Task frequency" data-i18n-aria-label="taskFrequency">
+          <option value="daily" data-i18n="daily">Daily</option>
+          <option value="weekly" data-i18n="weekly">Weekly</option>
+          <option value="monthly" data-i18n="monthly">Monthly</option>
         </select>
         <button type="submit" class="btn btn-primary btn-sm">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add
+          <span data-i18n="add">Add</span>
         </button>
       </form>
 
 
       <div class="search-bar" style="padding: 10px 18px; border-bottom: 1px solid var(--color-divider);">
-        <input type="text" id="search-input" class="task-input" placeholder="Search tasks..." aria-label="Search tasks" style="width: 100%;">
+        <input type="text" id="search-input" class="task-input" placeholder="Search tasks..." aria-label="Search tasks" data-i18n-placeholder="searchPlaceholder" data-i18n-aria-label="searchPlaceholder" style="width: 100%;">
       </div>
 
       <div style="display:flex; justify-content:flex-end; padding: 0 18px 10px;">
-        <button id="view-toggle-btn" class="btn btn-outline btn-sm">Switch to Calendar View</button>
+        <button id="view-toggle-btn" class="btn btn-outline btn-sm" data-i18n="switchToCalendar">Switch to Calendar View</button>
       </div>
 
       <div id="tag-filters" style="padding: 5px 18px 10px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;"></div>
@@ -193,7 +191,7 @@
       <div id="calendar-view" style="display:none; padding: 18px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;"></div>
 
 
-      <div class="task-list" id="task-list" role="list" aria-label="Task list">
+      <div class="task-list" id="task-list" role="list" aria-label="Task list" data-i18n-aria-label="taskList">
         <!-- Tasks rendered by JS -->
       </div>
 
@@ -202,52 +200,50 @@
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4">
           <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
         </svg>
-        <h3>All clear for this view</h3>
-        <p>No tasks here yet. Add one above or switch frequency tabs.</p>
+        <h3 data-i18n="emptyTitle">All clear for this view</h3>
+        <p data-i18n="emptyDesc">No tasks here yet. Add one above or switch frequency tabs.</p>
       </div>
 
       <!-- Export Actions -->
       <div class="export-bar">
         <button class="btn btn-outline" id="export-pdf">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          Export PDF
+          <span data-i18n="exportPdf">Export PDF</span>
         </button>
         <button class="btn btn-outline" id="export-excel">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          Export Excel
+          <span data-i18n="exportExcel">Export Excel</span>
         </button>
 
 
         <button class="btn btn-outline" id="share-url-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-          Share Current Role via URL
+          <span data-i18n="shareRole">Share Current Role via URL</span>
         </button>
         <button class="btn btn-outline" id="export-backup">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Backup (JSON)
+          <span data-i18n="backup">Backup (JSON)</span>
         </button>
         <button class="btn btn-outline" id="import-backup-btn">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Restore
+          <span data-i18n="restore">Restore</span>
         </button>
         <input type="file" id="import-backup-input" accept=".json" style="display:none">
         <button class="btn btn-ghost" id="trash-btn" aria-expanded="false" aria-controls="trash-panel">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Recently deleted<span class="trash-count"></span>
+          <span data-i18n="recentlyDeleted">Recently deleted</span><span class="trash-count"></span>
         </button>
-        <button class="btn btn-ghost" id="clear-done" data-i18n="clearCompleted">
-          Clear completed
-        </button>
+        <button class="btn btn-ghost" id="clear-done"><span data-i18n="clearCompleted">Clear completed</span></button>
       </div>
 
       <!-- Recently deleted tasks (kept 30 days) -->
-      <section id="trash-panel" class="trash-panel" aria-label="Recently deleted tasks" hidden>
+      <section id="trash-panel" class="trash-panel" aria-label="Recently deleted tasks" data-i18n-aria-label="trashLabel" hidden>
         <div class="trash-header">
-          <h2 class="trash-title">Recently deleted</h2>
-          <span class="trash-hint">Kept for 30 days</span>
-          <button type="button" id="trash-empty" class="btn btn-ghost btn-sm">Empty</button>
+          <h2 class="trash-title" data-i18n="recentlyDeleted">Recently deleted</h2>
+          <span class="trash-hint" data-i18n="trashHint">Kept for 30 days</span>
+          <button type="button" id="trash-empty" class="btn btn-ghost btn-sm" data-i18n="trashEmpty">Empty</button>
         </div>
-        <p id="trash-none" class="trash-none">Nothing here. Deleted and cleared tasks appear here for 30 days.</p>
+        <p id="trash-none" class="trash-none" data-i18n="trashNone">Nothing here. Deleted and cleared tasks appear here for 30 days.</p>
         <ul id="trash-list" class="trash-list"></ul>
       </section>
     </div>
@@ -263,14 +259,14 @@
           <circle cx="28" cy="28" r="5" fill="currentColor" opacity="0.15"/>
           <path d="M26 28l2 2 3-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span>EduPlanner by <strong>Harmony Digital Consults Ltd</strong></span>
+        <span><span data-i18n="footerBy">EduPlanner by</span> <strong>Harmony Digital Consults Ltd</strong></span>
       </div>
       <div class="footer-links">
-        <span class="footer-badge">Open Source</span>
+        <span class="footer-badge" data-i18n="openSource">Open Source</span>
         <span class="footer-sep">&middot;</span>
-        <span>No account needed</span>
+        <span data-i18n="noAccount">No account needed</span>
         <span class="footer-sep">&middot;</span>
-        <span>Data stays on your device</span>
+        <span data-i18n="dataLocal">Data stays on your device</span>
         <span class="footer-sep" data-analytics-only hidden>&middot;</span>
         <button type="button" id="analytics-toggle" class="footer-link-btn" data-analytics-only hidden>Usage stats: Off</button>
       </div>
@@ -281,29 +277,27 @@
   <!-- Quick Notes / Scratchpad -->
   <div id="scratchpad-container" class="scratchpad-closed" style="position: fixed; bottom: 20px; left: 20px; z-index: 999; background: var(--color-surface); border: 1px solid var(--color-primary); border-radius: 8px; box-shadow: var(--shadow-lg); overflow: hidden; transition: all 0.3s ease;">
     <div id="scratchpad-header" style="background: var(--color-primary); color: white; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold;">
-      <span>📝 Quick Notes</span>
+      <span data-i18n="quickNotes">📝 Quick Notes</span>
       <svg id="scratchpad-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
     </div>
     <div id="scratchpad-body" style="padding: 10px; display: none;">
-      <textarea id="scratchpad-textarea" placeholder="Jot down quick thoughts here..." style="width: 250px; height: 150px; border: 1px solid var(--color-border); border-radius: 4px; padding: 8px; font-family: inherit; font-size: 13px; resize: none; background: var(--color-bg); color: var(--color-text);"></textarea>
+      <textarea id="scratchpad-textarea" placeholder="Jot down quick thoughts here..." data-i18n-placeholder="notesPlaceholder" aria-label="Quick notes" data-i18n-aria-label="quickNotesLabel" style="width: 250px; height: 150px; border: 1px solid var(--color-border); border-radius: 4px; padding: 8px; font-family: inherit; font-size: 13px; resize: none; background: var(--color-bg); color: var(--color-text);"></textarea>
     </div>
   </div>
 
   <!-- Toast container -->
   <!-- Analytics consent (shown only when analytics is configured and the user hasn't chosen yet) -->
-  <div id="consent-banner" class="consent-banner" role="region" aria-label="Usage statistics" hidden>
-    <p class="consent-text">
-      Help improve EduPlanner by sharing <strong>anonymous</strong> usage stats (e.g. which roles and features are used).
-      Your tasks and notes never leave your device.
-    </p>
+  <div id="consent-banner" class="consent-banner" role="region" aria-label="Usage statistics" data-i18n-aria-label="usageStats" hidden>
+    <p class="consent-text" data-i18n="consentText">Help improve EduPlanner by sharing anonymous usage stats (e.g. which roles and features are used). Your tasks and notes never leave your device.</p>
     <div class="consent-actions">
-      <button type="button" id="consent-decline" class="btn btn-outline btn-sm">No thanks</button>
-      <button type="button" id="consent-accept" class="btn btn-primary btn-sm">Allow</button>
+      <button type="button" id="consent-decline" class="btn btn-outline btn-sm" data-i18n="noThanks">No thanks</button>
+      <button type="button" id="consent-accept" class="btn btn-primary btn-sm" data-i18n="allow">Allow</button>
     </div>
   </div>
 
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
