@@ -180,10 +180,42 @@
   let lastDeletedTask = null;
   let lastDeletedRole = null;
 
-  let archive = JSON.parse(localStorage.getItem('eduplanner_archive')) || [];
+  // ---------- Recently deleted (archive) ----------
+  // Deleted and cleared tasks are kept for ARCHIVE_DAYS so they can be
+  // restored, capped at ARCHIVE_MAX entries so they can't fill up storage.
+  const ARCHIVE_MAX = 200;
+  const ARCHIVE_DAYS = 30;
+  const DAY_MS = 86400000;
+
+  function readJSON(key, fallback) {
+    try {
+      const v = JSON.parse(localStorage.getItem(key));
+      return v === null || v === undefined ? fallback : v;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function pruneArchive(list) {
+    if (!Array.isArray(list)) return [];
+    const cutoff = Date.now() - ARCHIVE_DAYS * DAY_MS;
+    return list
+      .filter(a => a && typeof a.text === 'string' && Date.parse(a.deletedAt) >= cutoff)
+      .slice(-ARCHIVE_MAX);
+  }
+
+  let archive = pruneArchive(readJSON('eduplanner_archive', []));
+
+  function archiveTask(task, role) {
+    archive.push({ ...task, role, deletedAt: new Date().toISOString() });
+  }
 
   function saveArchive() {
-    localStorage.setItem('eduplanner_archive', JSON.stringify(archive));
+    archive = pruneArchive(archive);
+    try {
+      localStorage.setItem('eduplanner_archive', JSON.stringify(archive));
+    } catch (e) { /* non-critical: the task list itself is saved separately */ }
+    renderTrash();
   }
 
   let draggedTaskIndex = null;
@@ -242,7 +274,7 @@
     }
 
     if (needsSave) {
-      saveTasks();
+      saveTasks(false);
     }
 
     // Update last opened stamps
@@ -262,14 +294,29 @@
     return d.getUTCFullYear() + '-W' + weekNo;
   }
 
+  let isFirstRun = false;   // no saved tasks on this device yet
+  let loadFailed = false;   // saved tasks existed but couldn't be read
+
   function loadTasks() {
+    let saved = null;
     try {
-      const saved = localStorage.getItem('eduplanner_tasks');
+      saved = localStorage.getItem('eduplanner_tasks');
       if (saved) {
-        tasks = JSON.parse(saved);
-        return;
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          tasks = parsed;
+          return;
+        }
+        throw new Error('Unexpected task data');
       }
-    } catch (e) { /* ignore */ }
+      isFirstRun = true;
+    } catch (e) {
+      // Keep a copy of the unreadable data instead of silently overwriting it
+      loadFailed = true;
+      try {
+        if (saved) localStorage.setItem('eduplanner_tasks_unreadable', saved);
+      } catch (_) { /* storage full or blocked */ }
+    }
     // Initialize with defaults
     initDefaults();
   }
@@ -290,13 +337,23 @@
         });
       }
     }
-    saveTasks();
+    saveTasks(false);
   }
 
-  function saveTasks() {
+  let storageWarningShown = false;
+
+  // userChange=false for automatic saves (defaults, recurring resets)
+  function saveTasks(userChange = true) {
     try {
       localStorage.setItem('eduplanner_tasks', JSON.stringify(tasks));
-    } catch (e) { /* ignore — storage might be full or blocked */ }
+      if (userChange) onUserDataChange();
+    } catch (e) {
+      // Storage full or blocked: tell the user once instead of failing silently
+      if (!storageWarningShown) {
+        storageWarningShown = true;
+        showDataNotice('storage-error');
+      }
+    }
   }
 
   function uid() {
@@ -521,7 +578,7 @@
 
           lastDeletedTask = t;
           lastDeletedRole = currentRole;
-          archive.push({ ...t, deletedAt: new Date().toISOString() });
+          archiveTask(t, currentRole);
           saveArchive();
 
           tasks[currentRole] = tasks[currentRole].filter(x => x.id !== t.id);
@@ -842,7 +899,7 @@
     const before = tasks[currentRole].length;
 
     const completed = tasks[currentRole].filter(t => t.done);
-    completed.forEach(t => archive.push({ ...t, deletedAt: new Date().toISOString() }));
+    completed.forEach(t => archiveTask(t, currentRole));
     saveArchive();
     tasks[currentRole] = tasks[currentRole].filter(t => !t.done);
 
@@ -994,17 +1051,7 @@
 
 
   // ---------- Export: JSON Backup ----------
-  $('#export-backup').addEventListener('click', () => {
-    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'backup', role: currentRole });
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tasks));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "eduplanner_backup_" + new Date().toISOString().split('T')[0] + ".json");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-    showToast('Backup downloaded');
-  });
+  $('#export-backup').addEventListener('click', () => downloadBackup());
 
   // ---------- Import: JSON Backup ----------
   $('#import-backup-btn').addEventListener('click', () => {
@@ -1018,24 +1065,46 @@
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const importedTasks = sanitizeBackup(JSON.parse(event.target.result));
+        const raw = JSON.parse(event.target.result);
+        // v2 backups wrap the data: { app: 'EduPlanner', version: 2, tasks, customRoles, notes }
+        // v1 backups are just the tasks object
+        const isV2 = raw && raw.app === 'EduPlanner' && raw.tasks;
+        const importedTasks = sanitizeBackup(isV2 ? raw.tasks : raw);
         if (!importedTasks) throw new Error('Invalid format');
+        const backupLabels = {};
+        if (isV2 && raw.customRoles && typeof raw.customRoles === 'object') {
+          for (const [key, label] of Object.entries(raw.customRoles)) {
+            if (isSafeRoleKey(key) && typeof label === 'string' && label.trim()) {
+              backupLabels[key] = label.trim().slice(0, 60);
+            }
+          }
+        }
+        const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
+
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
-        if (confirm(`Restore ${count} task(s) from this backup? This replaces all your current tasks.`)) {
+        const what = backupNotes ? 'all your current tasks and quick notes' : 'all your current tasks';
+        if (confirm(`Restore ${count} task(s) from this backup? This replaces ${what}.`)) {
           tasks = importedTasks;
           // Make sure every restored role has a tab
           for (const role of Object.keys(tasks)) {
             if (!ROLE_LABELS[role]) {
-              const label = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              const label = backupLabels[role] || role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
               ROLE_LABELS[role] = label;
               customRoles[role] = label;
               addRoleTab(role, label);
             }
           }
-          localStorage.setItem('eduplanner_custom_roles', JSON.stringify(customRoles));
+          try {
+            localStorage.setItem('eduplanner_custom_roles', JSON.stringify(customRoles));
+            if (backupNotes !== null) localStorage.setItem('eduplanner_notes', backupNotes);
+          } catch (_) { /* saveTasks below reports storage problems */ }
+          const notesBox = document.getElementById('scratchpad-textarea');
+          if (notesBox && backupNotes !== null) notesBox.value = backupNotes;
           saveTasks();
           updateAnalytics();
           renderTasks();
+          hideDataNotice();
+          if (window.Analytics) window.Analytics.track('import_data', { export_type: 'backup' });
           showToast('Backup restored successfully');
         }
       } catch (err) {
@@ -1160,7 +1229,14 @@
 
     // Auto-save on type
     scratchpadTextarea.addEventListener('input', (e) => {
-      localStorage.setItem('eduplanner_notes', e.target.value);
+      try {
+        localStorage.setItem('eduplanner_notes', e.target.value);
+      } catch (err) {
+        if (!storageWarningShown) {
+          storageWarningShown = true;
+          showDataNotice('storage-error');
+        }
+      }
     });
   }
 
@@ -1452,12 +1528,239 @@
     }
   }
 
+  // ---------- Data safety: backups, reminders, notices ----------
+  const BACKUP_KEY = 'eduplanner_last_backup';          // ms timestamp
+  const CHANGE_KEY = 'eduplanner_last_change';          // ms timestamp
+  const FIRST_USE_KEY = 'eduplanner_first_use';         // ms timestamp
+  const SNOOZE_KEY = 'eduplanner_backup_snooze_until';  // ms timestamp
+  const RESTORE_OFFER_KEY = 'eduplanner_restore_offer_dismissed';
+  const BACKUP_REMIND_DAYS = 14;
+  const SNOOZE_DAYS = 7;
+
+  function getTime(key) {
+    try { return Number(localStorage.getItem(key)) || 0; } catch (e) { return 0; }
+  }
+  function setTime(key, ms) {
+    try { localStorage.setItem(key, String(ms)); } catch (e) { /* storage full or blocked */ }
+  }
+
+  let persistRequested = false;
+  // Ask the browser not to clear EduPlanner's storage automatically.
+  // Done after the user's first real change, so any browser prompt has context.
+  function requestPersistentStorage() {
+    if (persistRequested || !navigator.storage || !navigator.storage.persist) return;
+    persistRequested = true;
+    navigator.storage.persisted()
+      .then(already => already || navigator.storage.persist())
+      .catch(() => {});
+  }
+
+  function onUserDataChange() {
+    setTime(CHANGE_KEY, Date.now());
+    requestPersistentStorage();
+  }
+
+  function buildBackup() {
+    let notes = '';
+    try { notes = localStorage.getItem('eduplanner_notes') || ''; } catch (e) { /* ignore */ }
+    return {
+      app: 'EduPlanner',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      tasks,
+      customRoles,
+      notes
+    };
+  }
+
+  function downloadBackup() {
+    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'backup', role: currentRole });
+    const blob = new Blob([JSON.stringify(buildBackup(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'eduplanner_backup_' + localDateStr(new Date()) + '.json';
+    document.body.appendChild(a); // required for Firefox
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTime(BACKUP_KEY, Date.now());
+    if (currentNotice === 'backup-reminder' || currentNotice === 'storage-error') hideDataNotice();
+    showToast('Backup downloaded. Keep the file somewhere safe.');
+  }
+
+  // Inline notice above the planner (one at a time, most important wins)
+  const NOTICES = {
+    'storage-error': {
+      rank: 3,
+      text: 'Your latest changes could not be saved: this browser\'s storage is full or blocked. Download a backup now so nothing is lost.',
+      primary: ['Download backup', () => downloadBackup()],
+      secondary: ['Dismiss', () => hideDataNotice()]
+    },
+    'unreadable': {
+      rank: 2,
+      text: 'Your saved tasks could not be read, so EduPlanner started fresh. A copy of the old data was kept on this device. If you have a backup file, restore it now.',
+      primary: ['Restore backup', () => $('#import-backup-input').click()],
+      secondary: ['Dismiss', () => hideDataNotice()]
+    },
+    'backup-reminder': {
+      rank: 1,
+      text: 'Your tasks are only stored in this browser. It has been a while since your last backup. Download one so you don\'t lose your work if browser data is cleared.',
+      primary: ['Download backup', () => downloadBackup()],
+      secondary: ['Remind me later', () => {
+        setTime(SNOOZE_KEY, Date.now() + SNOOZE_DAYS * DAY_MS);
+        hideDataNotice();
+      }]
+    },
+    'restore-offer': {
+      rank: 0,
+      text: 'New here, or moving from another device? If you have an EduPlanner backup file, you can restore it now.',
+      primary: ['Restore backup', () => $('#import-backup-input').click()],
+      secondary: ['No thanks', () => {
+        try { localStorage.setItem(RESTORE_OFFER_KEY, '1'); } catch (e) { /* ignore */ }
+        hideDataNotice();
+      }]
+    }
+  };
+  let currentNotice = null;
+
+  function showDataNotice(kind) {
+    const n = NOTICES[kind];
+    const box = document.getElementById('data-notice');
+    if (!n || !box) return;
+    if (currentNotice && NOTICES[currentNotice].rank > n.rank) return;
+    currentNotice = kind;
+    box.dataset.kind = kind;
+    $('#data-notice-text').textContent = n.text;
+    $('#data-notice-primary').textContent = n.primary[0];
+    $('#data-notice-secondary').textContent = n.secondary[0];
+    box.hidden = false;
+  }
+
+  function hideDataNotice() {
+    const box = document.getElementById('data-notice');
+    if (box) box.hidden = true;
+    currentNotice = null;
+  }
+
+  if (document.getElementById('data-notice')) {
+    $('#data-notice-primary').addEventListener('click', () => currentNotice && NOTICES[currentNotice].primary[1]());
+    $('#data-notice-secondary').addEventListener('click', () => currentNotice && NOTICES[currentNotice].secondary[1]());
+  }
+
+  function checkDataNotices() {
+    const now = Date.now();
+    let firstUse = getTime(FIRST_USE_KEY);
+    if (!firstUse) {
+      firstUse = now;
+      setTime(FIRST_USE_KEY, now);
+    }
+
+    if (loadFailed) {
+      showDataNotice('unreadable');
+      return;
+    }
+
+    if (isFirstRun) {
+      let dismissed = false;
+      try { dismissed = localStorage.getItem(RESTORE_OFFER_KEY) === '1'; } catch (e) { /* ignore */ }
+      if (!dismissed) showDataNotice('restore-offer');
+      return;
+    }
+
+    const lastBackup = getTime(BACKUP_KEY);
+    const lastChange = getTime(CHANGE_KEY);
+    const due = now - Math.max(lastBackup, firstUse) >= BACKUP_REMIND_DAYS * DAY_MS;
+    if (lastChange > lastBackup && due && now >= getTime(SNOOZE_KEY)) {
+      showDataNotice('backup-reminder');
+    }
+  }
+
+  // ---------- Recently deleted panel ----------
+  const trashBtn = document.getElementById('trash-btn');
+  const trashPanel = document.getElementById('trash-panel');
+
+  function renderTrash() {
+    if (!trashBtn || !trashPanel) return;
+    trashBtn.querySelector('.trash-count').textContent = archive.length ? ` (${archive.length})` : '';
+    if (trashPanel.hidden) return;
+
+    const list = $('#trash-list');
+    list.innerHTML = '';
+    $('#trash-none').hidden = archive.length > 0;
+    $('#trash-empty').hidden = archive.length === 0;
+
+    // Newest first; keep the archive index so Restore targets the right entry
+    archive
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => Date.parse(b.entry.deletedAt) - Date.parse(a.entry.deletedAt))
+      .forEach(({ entry, index }) => {
+      const li = document.createElement('li');
+      li.className = 'trash-item';
+
+      const info = document.createElement('div');
+      info.className = 'trash-info';
+      const text = document.createElement('span');
+      text.className = 'trash-text';
+      text.textContent = entry.text;
+      const meta = document.createElement('span');
+      meta.className = 'trash-meta';
+      const roleLabel = ROLE_LABELS[entry.role] || entry.role || 'Unknown role';
+      const when = new Date(entry.deletedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      meta.textContent = `${roleLabel} · ${entry.freq || 'daily'} · deleted ${when}`;
+      info.append(text, meta);
+
+      const restore = document.createElement('button');
+      restore.type = 'button';
+      restore.className = 'btn btn-outline btn-sm';
+      restore.textContent = 'Restore';
+      restore.addEventListener('click', () => restoreFromTrash(index));
+
+      li.append(info, restore);
+      list.appendChild(li);
+    });
+  }
+
+  function restoreFromTrash(index) {
+    const entry = archive[index];
+    if (!entry) return;
+    const role = isSafeRoleKey(entry.role) ? entry.role : currentRole;
+    const { deletedAt, role: _role, ...task } = entry;
+    if (!tasks[role]) tasks[role] = [];
+    if (tasks[role].some(t => t.id === task.id)) task.id = uid();
+    tasks[role].push(task);
+    archive.splice(index, 1);
+    saveTasks();
+    saveArchive();
+    updateAnalytics();
+    renderTasks();
+    showToast(`Restored to ${ROLE_LABELS[role] || role}`);
+  }
+
+  if (trashBtn && trashPanel) {
+    trashBtn.addEventListener('click', () => {
+      trashPanel.hidden = !trashPanel.hidden;
+      trashBtn.setAttribute('aria-expanded', String(!trashPanel.hidden));
+      renderTrash();
+    });
+    $('#trash-empty').addEventListener('click', () => {
+      if (!archive.length) return;
+      if (confirm(`Permanently delete ${archive.length} task(s)? This cannot be undone.`)) {
+        archive = [];
+        saveArchive();
+        showToast('Recently deleted emptied');
+      }
+    });
+  }
+
   // ---------- Init ----------
   loadTasks();
   checkRecurringResets();
+  saveArchive(); // writes back the pruned archive
   updateAnalytics();
   renderTasks();
   checkDueTasks();
+  checkDataNotices();
   setTimeout(checkUrlImport, 300);
 
 })();

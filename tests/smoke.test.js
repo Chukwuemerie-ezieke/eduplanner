@@ -30,6 +30,7 @@ function startServer() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
+const DAY_MS = 86400000;
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
 
@@ -37,7 +38,7 @@ const test = (name, fn) => tests.push({ name, fn });
 // blocked so the tests are fast and deterministic.
 async function openApp(browser, base, { query = '', initScript, serviceWorkers = 'block' } = {}) {
   const context = await browser.newContext({ serviceWorkers });
-  if (initScript) await context.addInitScript(initScript);
+  if (initScript) await context.addInitScript(initScript, DAY_MS);
   const external = []; // URLs of blocked external requests, newest last
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
     external.push(route.request().url());
@@ -144,6 +145,145 @@ test('fits a phone screen without sideways scrolling', async (browser, base) => 
   await page.waitForSelector('#task-list .task-item');
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(width <= 390, 'page is ' + width + 'px wide on a 390px phone');
+  await context.close();
+});
+
+// ---------- Data safety ----------
+const DAY = 86400000;
+
+test('deleted task appears in "Recently deleted" and can be restored', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const first = page.locator('#task-list .task-item').first();
+  const text = (await first.locator('.task-text').textContent()).trim();
+  await first.hover();
+  await first.locator('.task-delete').click();
+  await page.waitForFunction((t) => ![...document.querySelectorAll('#task-list .task-text')].some(e => e.textContent.trim() === t), text);
+  await page.click('#trash-btn');
+  await page.locator('#trash-list .trash-item', { hasText: text }).getByText('Restore').click();
+  await page.locator('#task-list .task-text', { hasText: text }).waitFor();
+  assert.strictEqual(await page.locator('#trash-list .trash-item').count(), 0);
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('archive drops entries older than 30 days and keeps at most 200', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: (DAY) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      const old = { text: 'Ancient', freq: 'daily', role: 'teacher', deletedAt: new Date(Date.now() - 40 * DAY).toISOString() };
+      const recent = Array.from({ length: 250 }, (_, i) => ({ text: 'Recent ' + i, freq: 'daily', role: 'teacher', deletedAt: new Date().toISOString() }));
+      localStorage.setItem('eduplanner_archive', JSON.stringify([old, ...recent]));
+    }
+  });
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_archive')));
+  assert.strictEqual(stored.length, 200);
+  assert.ok(!stored.some(e => e.text === 'Ancient'), 'old entry pruned');
+  assert.strictEqual(stored[199].text, 'Recent 249', 'newest kept');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('backup includes roles and notes, and restores them on another device', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  page.once('dialog', (d) => d.accept('Exams Officer'));
+  await page.click('#add-role-btn');
+  await page.fill('#new-task-input', 'Collate exam scripts');
+  await page.press('#new-task-input', 'Enter');
+  await page.evaluate(() => localStorage.setItem('eduplanner_notes', 'Remember chalk'));
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#export-backup')]);
+  const file = await download.path();
+  const fileBuffer = fs.readFileSync(file); // the download is deleted when the context closes
+  const backup = JSON.parse(fileBuffer.toString('utf8'));
+  assert.strictEqual(backup.version, 2);
+  assert.strictEqual(backup.customRoles.exams_officer, 'Exams Officer');
+  assert.strictEqual(backup.notes, 'Remember chalk');
+  assert.ok(await page.evaluate(() => Number(localStorage.getItem('eduplanner_last_backup')) > 0), 'backup date recorded');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+
+  // Fresh device: restore the file
+  const other = await openApp(browser, base);
+  other.page.on('dialog', (d) => d.accept());
+  await other.page.setInputFiles('#import-backup-input', { name: 'backup.json', mimeType: 'application/json', buffer: fileBuffer });
+  await other.page.locator('.tab[data-role="exams_officer"]', { hasText: 'Exams Officer' }).click();
+  await other.page.locator('#task-list .task-text', { hasText: 'Collate exam scripts' }).waitFor();
+  assert.strictEqual(await other.page.inputValue('#scratchpad-textarea'), 'Remember chalk');
+  assert.deepStrictEqual(other.errors, []);
+  await other.context.close();
+});
+
+test('old-format backups still restore', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  page.on('dialog', (d) => d.accept());
+  const oldBackup = { teacher: [{ id: 'a', text: 'Old backup task', freq: 'daily', done: false }] };
+  await page.setInputFiles('#import-backup-input', {
+    name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(oldBackup))
+  });
+  await page.locator('#task-list .task-text', { hasText: 'Old backup task' }).waitFor();
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('first visit offers to restore a backup; "No thanks" is remembered', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.locator('#data-notice[data-kind="restore-offer"]').waitFor();
+  await page.click('#data-notice-secondary');
+  assert.ok(await page.locator('#data-notice').isHidden());
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.ok(await page.locator('#data-notice').isHidden(), 'not shown again');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('reminds to back up after 14 days of changes; downloading clears it', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: (DAY) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_tasks', JSON.stringify({ teacher: [{ id: 'x', text: 'Existing task', freq: 'daily', done: false }] }));
+      localStorage.setItem('eduplanner_first_use', String(Date.now() - 20 * DAY));
+      localStorage.setItem('eduplanner_last_change', String(Date.now() - DAY));
+    }
+  });
+  await page.locator('#data-notice[data-kind="backup-reminder"]').waitFor();
+  await Promise.all([page.waitForEvent('download'), page.click('#data-notice-primary')]);
+  assert.ok(await page.locator('#data-notice').isHidden());
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.ok(await page.locator('#data-notice').isHidden(), 'no reminder right after a backup');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('unreadable saved data is kept, not overwritten', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: () => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_tasks', '{not valid json');
+    }
+  });
+  await page.locator('#data-notice[data-kind="unreadable"]').waitFor();
+  assert.strictEqual(await page.evaluate(() => localStorage.getItem('eduplanner_tasks_unreadable')), '{not valid json');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('warns when changes cannot be saved (storage full)', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.evaluate(() => {
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === 'eduplanner_tasks') throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+  });
+  await page.fill('#new-task-input', 'Will not fit');
+  await page.press('#new-task-input', 'Enter');
+  await page.locator('#data-notice[data-kind="storage-error"]').waitFor();
+  assert.deepStrictEqual(errors, []);
   await context.close();
 });
 
