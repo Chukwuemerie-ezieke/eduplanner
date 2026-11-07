@@ -38,13 +38,17 @@ const test = (name, fn) => tests.push({ name, fn });
 async function openApp(browser, base, { query = '', initScript, serviceWorkers = 'block' } = {}) {
   const context = await browser.newContext({ serviceWorkers });
   if (initScript) await context.addInitScript(initScript);
-  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const external = []; // URLs of blocked external requests, newest last
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
+    external.push(route.request().url());
+    route.abort();
+  });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(base + '/' + query);
   await page.waitForSelector('#task-list .task-item');
-  return { context, page, errors };
+  return { context, page, errors, external };
 }
 
 test('loads with default tasks and no errors', async (browser, base) => {
@@ -129,6 +133,72 @@ test('works offline after first visit', async (browser, base) => {
   await context.setOffline(true);
   await page.reload();
   await page.waitForSelector('#task-list .task-item');
+  await context.close();
+});
+
+test('fits a phone screen without sideways scrolling', async (browser, base) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const page = await context.newPage();
+  await page.goto(base + '/');
+  await page.waitForSelector('#task-list .task-item');
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(width <= 390, 'page is ' + width + 'px wide on a 390px phone');
+  await context.close();
+});
+
+// ---------- Analytics consent (opt-in) ----------
+const isTracker = (url) => /posthog\.com|cloudflareinsights\.com/.test(url);
+
+test('analytics: nothing loads before consent, banner is shown', async (browser, base) => {
+  const { context, page, errors, external } = await openApp(browser, base);
+  await page.locator('#consent-banner').waitFor({ state: 'visible' });
+  await page.waitForTimeout(500);
+  assert.deepStrictEqual(external.filter(isTracker), [], 'no tracker requests before consent');
+  assert.strictEqual(await page.textContent('#analytics-toggle'), 'Usage stats: Off');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('analytics: "Allow" loads trackers and is remembered', async (browser, base) => {
+  const { context, page, errors, external } = await openApp(browser, base);
+  await page.click('#consent-accept');
+  await page.locator('#consent-banner').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('script[src*="posthog"]'));
+  assert.ok(external.some((u) => /cloudflareinsights\.com/.test(u)), 'Cloudflare beacon requested');
+  assert.strictEqual(await page.textContent('#analytics-toggle'), 'Usage stats: On');
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.ok(await page.locator('#consent-banner').isHidden(), 'banner stays hidden after reload');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('analytics: "No thanks" sends nothing, footer switch can turn it on', async (browser, base) => {
+  const { context, page, errors, external } = await openApp(browser, base);
+  await page.click('#consent-decline');
+  await page.locator('#consent-banner').waitFor({ state: 'hidden' });
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  await page.waitForTimeout(500);
+  assert.ok(await page.locator('#consent-banner').isHidden(), 'banner stays hidden after reload');
+  assert.deepStrictEqual(external.filter(isTracker), [], 'no tracker requests after declining');
+  await page.click('#analytics-toggle');
+  assert.strictEqual(await page.textContent('#analytics-toggle'), 'Usage stats: On');
+  await page.waitForFunction(() => document.querySelector('script[src*="posthog"]'));
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('analytics: Global Privacy Control hides the banner and sends nothing', async (browser, base) => {
+  const { context, page, errors, external } = await openApp(browser, base, {
+    initScript: () => { Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true }); }
+  });
+  await page.waitForTimeout(500);
+  assert.ok(await page.locator('#consent-banner').isHidden());
+  assert.ok(await page.locator('#analytics-toggle').isHidden());
+  assert.deepStrictEqual(external.filter(isTracker), []);
+  assert.deepStrictEqual(errors, []);
   await context.close();
 });
 

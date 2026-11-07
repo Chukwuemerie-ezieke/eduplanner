@@ -246,6 +246,8 @@
         <span>No account needed</span>
         <span class="footer-sep">&middot;</span>
         <span>Data stays on your device</span>
+        <span class="footer-sep" data-analytics-only hidden>&middot;</span>
+        <button type="button" id="analytics-toggle" class="footer-link-btn" data-analytics-only hidden>Usage stats: Off</button>
       </div>
     </div>
   </footer>
@@ -263,6 +265,18 @@
   </div>
 
   <!-- Toast container -->
+  <!-- Analytics consent (shown only when analytics is configured and the user hasn't chosen yet) -->
+  <div id="consent-banner" class="consent-banner" role="region" aria-label="Usage statistics" hidden>
+    <p class="consent-text">
+      Help improve EduPlanner by sharing <strong>anonymous</strong> usage stats (e.g. which roles and features are used).
+      Your tasks and notes never leave your device.
+    </p>
+    <div class="consent-actions">
+      <button type="button" id="consent-decline" class="btn btn-outline btn-sm">No thanks</button>
+      <button type="button" id="consent-accept" class="btn btn-primary btn-sm">Allow</button>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="app.js"></script>

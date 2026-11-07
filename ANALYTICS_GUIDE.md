@@ -4,6 +4,8 @@ Because EduPlanner is a lightweight, zero-backend, purely client-side static web
 
 If you want to track usage (e.g., how many educators visit the site, which roles are most popular, or daily pageviews), you must embed a third-party analytics script into `index.html`.
 
+> **Built-in option (recommended):** EduPlanner already supports Cloudflare Web Analytics and PostHog through `config.js`. That route is **opt-in**: nothing loads until the user clicks **Allow** on the usage-stats banner, and Do Not Track / Global Privacy Control are honoured. If you paste a snippet from this guide directly into `index.html` instead, it will run for every visitor without asking. Load it from `analytics.js` after consent instead.
+
 Since budget is often a concern, here are the best **100% free or generous free-tier** analytics platforms you can use:
 
 ---
