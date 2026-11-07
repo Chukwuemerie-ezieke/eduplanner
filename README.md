@@ -62,6 +62,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 | **Dark Mode** | Auto-detects system preference with manual toggle |
 | **No Signup Required** | Zero accounts, zero cost, no personal data collected (see [Privacy](#privacy-preserving-analytics)) |
 | **localStorage** | Data persists across sessions on the same device |
+| **Backups & Recovery** | One-file backups (tasks, custom roles, notes), backup reminders, and a 30-day "Recently deleted" bin |
 | **Open Source** | MIT License — customize and redistribute freely |
 
 ---
@@ -211,9 +212,14 @@ Monthly: activity reports, wellness workshops, career guidance
 3. **Check off tasks** as you complete them
 4. **Add custom tasks** using the input field
 5. **Export** your task list as PDF or Excel when needed
-6. **Clear completed** tasks to keep your list clean
+6. **Clear completed** tasks to keep your list clean. Deleted or cleared tasks can be restored from **Recently deleted** for 30 days
 
-Data is saved automatically in your browser. It persists across sessions but stays entirely on your device.
+Data is saved automatically in your browser. It persists across sessions but stays entirely on your device, so **clearing browser data or switching devices loses it unless you have a backup**:
+
+- **Backup (JSON)** downloads one file with your tasks, custom roles and quick notes. **Restore** loads it on any device.
+- If you've made changes and haven't backed up in 14 days, EduPlanner shows a reminder.
+- EduPlanner asks the browser to keep its storage so it isn't cleared automatically.
+- If storage is full or saved data can't be read, you'll see a warning instead of losing data silently.
 
 ---
 

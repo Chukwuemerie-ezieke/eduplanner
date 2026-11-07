@@ -126,6 +126,16 @@
       <h2>EduPlanner - Task Report</h2>
       <p id="print-date"></p>
     </div>
+    <!-- Data safety notice (backup reminders, storage problems) -->
+    <div id="data-notice" class="data-notice" role="status" hidden>
+      <svg class="data-notice-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <p id="data-notice-text" class="data-notice-text"></p>
+      <div class="data-notice-actions">
+        <button type="button" id="data-notice-secondary" class="btn btn-ghost btn-sm"></button>
+        <button type="button" id="data-notice-primary" class="btn btn-primary btn-sm"></button>
+      </div>
+    </div>
+
     <div class="workspace">
       <!-- Frequency Filter -->
       <div class="freq-bar">
@@ -221,10 +231,25 @@
           Restore
         </button>
         <input type="file" id="import-backup-input" accept=".json" style="display:none">
+        <button class="btn btn-ghost" id="trash-btn" aria-expanded="false" aria-controls="trash-panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Recently deleted<span class="trash-count"></span>
+        </button>
         <button class="btn btn-ghost" id="clear-done" data-i18n="clearCompleted">
           Clear completed
         </button>
       </div>
+
+      <!-- Recently deleted tasks (kept 30 days) -->
+      <section id="trash-panel" class="trash-panel" aria-label="Recently deleted tasks" hidden>
+        <div class="trash-header">
+          <h2 class="trash-title">Recently deleted</h2>
+          <span class="trash-hint">Kept for 30 days</span>
+          <button type="button" id="trash-empty" class="btn btn-ghost btn-sm">Empty</button>
+        </div>
+        <p id="trash-none" class="trash-none">Nothing here. Deleted and cleared tasks appear here for 30 days.</p>
+        <ul id="trash-list" class="trash-list"></ul>
+      </section>
     </div>
   </main>
 
