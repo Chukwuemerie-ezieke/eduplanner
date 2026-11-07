@@ -1,0 +1,12 @@
+{
+  "name": "eduplanner",
+  "private": true,
+  "description": "Role-based task planner for educators (static site, no build step)",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/smoke.test.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}

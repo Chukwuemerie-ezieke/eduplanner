@@ -4,7 +4,7 @@ window.EDUPLANNER_CONFIG = {
     ANALYTICS_ENABLED: true,
 
     // Turn this on to see console logs for analytics events (useful for local testing)
-    ANALYTICS_DEBUG: true,
+    ANALYTICS_DEBUG: false,
 
     // Cloudflare Web Analytics Token
     // Leave empty to disable Cloudflare Web Analytics

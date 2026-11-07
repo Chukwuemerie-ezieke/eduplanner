@@ -60,7 +60,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 | **Excel Export** | Download task data as `.xlsx` spreadsheets |
 | **Works Offline (PWA)** | Install on any phone or computer — full functionality without internet |
 | **Dark Mode** | Auto-detects system preference with manual toggle |
-| **No Signup Required** | Zero accounts, zero cost, zero data collection |
+| **No Signup Required** | Zero accounts, zero cost, no personal data collected (see [Privacy](#privacy-preserving-analytics)) |
 | **localStorage** | Data persists across sessions on the same device |
 | **Open Source** | MIT License — customize and redistribute freely |
 
@@ -131,8 +131,13 @@ eduplanner/
 ├── index.html          # Main HTML structure
 ├── style.css           # All styles (light + dark mode)
 ├── app.js              # App logic, task management, exports
-├── sw.js               # Service worker for offline support
+├── sw.js               # Service worker for offline support (bump CACHE_VERSION on release)
+├── analytics.js        # Optional, privacy-filtered analytics
+├── config.js           # Analytics settings
 ├── manifest.json       # PWA manifest
+├── package.json        # Dev-only: smoke test runner
+├── tests/
+│   └── smoke.test.js   # Browser smoke tests (Playwright)
 ├── LICENSE             # MIT License
 ├── CNAME               # Custom domain config
 ├── icons/
@@ -146,6 +151,20 @@ eduplanner/
     ├── mobile.png
     └── mobile-dark.png
 ```
+
+### Running the smoke tests
+
+The app itself has no build step. The tests only need Node.js and Playwright:
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
+They load the app in Chromium and check that tasks render, tasks and subtasks can be added, shared links and backups are validated, custom roles work, and the app runs offline. GitHub Actions runs them on every pull request.
+
+**Releasing:** bump `CACHE_VERSION` in `sw.js` whenever you deploy, so installed copies drop their old cache.
 
 ---
 
@@ -248,10 +267,12 @@ Anambra State, Nigeria
 
 EduPlanner supports optional, privacy-focused analytics to help developers understand usage while respecting users.
 
-By default, no data leaves the browser. To enable tracking:
-1. Copy \`config.example.js\` to \`config.js\`.
-2. Edit \`config.js\` and set \`ANALYTICS_ENABLED: true\`.
-3. Add your **Cloudflare Web Analytics** token or **PostHog** Project API Key.
+**The hosted site** (eduplanner.harmonydigitalconsults.com.ng) has anonymous analytics turned on, using Cloudflare Web Analytics and PostHog. Nothing is sent if your browser has "Do Not Track" or Global Privacy Control turned on.
+
+**Self-hosting:** analytics are controlled by `config.js`:
+1. Copy `config.example.js` to `config.js`.
+2. Set `ANALYTICS_ENABLED: true` (or `false` to send nothing).
+3. Add your **Cloudflare Web Analytics** token and/or **PostHog** Project API Key.
 
 **What we track:**
 - Page views (e.g., viewing Home).
@@ -261,10 +282,10 @@ By default, no data leaves the browser. To enable tracking:
 **What we NEVER track (Strict Privacy Promise):**
 - Personal identifiers (Names, emails, IDs).
 - The text content of your tasks or notes.
-- IP Addresses (Cloudflare and PostHog are configured not to log IPs).
+- User profiles (PostHog events are anonymous; no person profiles are created).
 - Cross-site tracking cookies.
 
 **Offline Support:**
 EduPlanner queues analytics events when offline and securely flushes them once reconnected. No data is lost when used as an offline PWA.
 
-To disable analytics completely, either do not provide a \`config.js\` file, set \`ANALYTICS_ENABLED: false\`, or use your browser's "Do Not Track" / Global Privacy Control features.
+To disable analytics completely, either do not provide a `config.js` file, set `ANALYTICS_ENABLED: false`, or use your browser's "Do Not Track" / Global Privacy Control features.
