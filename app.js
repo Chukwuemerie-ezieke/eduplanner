@@ -7,6 +7,57 @@
 (function () {
   'use strict';
 
+  // ---------- Language (translations live in i18n.js) ----------
+  const I18N = window.EDU_I18N || {
+    ui: { en: {} }, tasks: {}, locales: { en: { date: 'en-GB', html: 'en' } }, languages: ['en']
+  };
+  const LANG_KEY = 'eduplanner_lang';
+
+  // Saved choice first; otherwise follow the browser (French browsers get French)
+  function detectLanguage() {
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (saved && I18N.ui[saved]) return saved;
+    } catch (e) { /* storage blocked */ }
+    const nav = String(navigator.language || '').toLowerCase();
+    if (nav.startsWith('fr') && I18N.ui.fr) return 'fr';
+    if (nav.startsWith('pcm') && I18N.ui.pidgin) return 'pidgin';
+    return 'en';
+  }
+  let currentLang = detectLanguage();
+
+  // Translate a UI string. Fills {placeholders}; picks key_one/key_other from vars.n.
+  function tr(key, vars) {
+    const dict = I18N.ui[currentLang] || {};
+    let k = key;
+    if (vars && typeof vars.n === 'number') {
+      const plural = key + (vars.n === 1 ? '_one' : '_other');
+      if (dict[plural] || I18N.ui.en[plural]) k = plural;
+    }
+    let str = dict[k] || I18N.ui.en[k] || key;
+    if (vars) str = str.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? String(vars[name]) : m));
+    return str;
+  }
+
+  // Built-in tasks are stored in English and translated for display.
+  // Anything the user typed is shown exactly as written.
+  function taskText(text) {
+    if (currentLang === 'en') return text;
+    const entry = I18N.tasks[text];
+    return (entry && entry[currentLang]) || text;
+  }
+
+  function dateLocale() {
+    return (I18N.locales[currentLang] || I18N.locales.en).date;
+  }
+
+  // "2026-11-07" -> "7 Nov 2026" / "7 nov. 2026" in the current language
+  function formatDate(isoDate) {
+    const d = new Date(isoDate + 'T00:00:00');
+    if (isNaN(d)) return isoDate;
+    return d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
   // ---------- Pre-populated tasks by role and frequency ----------
   const DEFAULT_TASKS = {
     teacher: {
@@ -172,6 +223,13 @@
     librarian: 'Librarian',
     counselor: 'School Counselor'
   };
+  const BUILT_IN_ROLES = Object.keys(ROLE_LABELS);
+
+  // Built-in roles are translated; custom roles keep the name the user gave them
+  function roleLabel(key) {
+    if (BUILT_IN_ROLES.includes(key)) return tr('role.' + key);
+    return ROLE_LABELS[key] || key || tr('unknownRole');
+  }
 
   // ---------- State ----------
   let currentRole = 'teacher';
@@ -444,7 +502,7 @@
     allPill.style.borderRadius = '20px';
     allPill.style.padding = '2px 10px';
     allPill.style.fontSize = '12px';
-    allPill.textContent = 'All';
+    allPill.textContent = tr('all');
     allPill.addEventListener('click', () => {
       activeTagFilter = null;
       renderTasks();
@@ -469,7 +527,7 @@
 
   function renderTasks() {
     const printDate = document.getElementById('print-date');
-    if (printDate) printDate.textContent = "Role: " + (ROLE_LABELS[currentRole] || currentRole) + " | Date: " + new Date().toLocaleDateString();
+    if (printDate) printDate.textContent = tr('printRoleDate', { role: roleLabel(currentRole), date: new Date().toLocaleDateString(dateLocale()) });
     taskList.innerHTML = '';
 
     const roleTasks = tasks[currentRole] || [];
@@ -486,7 +544,8 @@
     const searchInput = document.getElementById('search-input');
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     if (searchTerm) {
-      toShow = toShow.filter(t => t.text.toLowerCase().includes(searchTerm));
+      toShow = toShow.filter(t =>
+        t.text.toLowerCase().includes(searchTerm) || taskText(t.text).toLowerCase().includes(searchTerm));
     }
 
 
@@ -511,12 +570,12 @@
         const checkId = 'check-' + t.id;
 
         item.innerHTML = `
-          <input type="checkbox" id="${checkId}" class="task-checkbox" ${t.done ? 'checked' : ''} aria-label="Mark task complete">
+          <input type="checkbox" id="${checkId}" class="task-checkbox" ${t.done ? 'checked' : ''} aria-label="${escHtml(tr('markComplete'))}">
           <div class="task-content">
-            <label for="${checkId}" class="task-text">${parseMarkdown(t.text)}</label>
+            <label for="${checkId}" class="task-text">${parseMarkdown(taskText(t.text))}</label>
 
-            ${currentFreq === 'all' ? `<div class="task-freq-badge ${t.freq}">${t.freq}</div>` : ''}
-            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;display:inline-block;">Due: ${escHtml(t.dueDate)}</div>` : ''}
+            ${currentFreq === 'all' ? `<div class="task-freq-badge ${escHtml(t.freq)}">${escHtml(tr(t.freq))}</div>` : ''}
+            ${t.dueDate ? `<div class="task-due-date" style="font-size:11px;color:var(--color-text-faint);margin-top:2px;display:inline-block;">${escHtml(tr('due', { date: formatDate(t.dueDate) }))}</div>` : ''}
             ${t.tag ? `<span class="task-tag" style="font-size:10px; background:var(--color-surface-2); border: 1px solid var(--color-border); padding:2px 6px; border-radius:4px; margin-left: 6px; display:inline-block;">${escHtml(t.tag)}</span>` : ''}
             ${Array.isArray(t.subtasks) && t.subtasks.length ? `
             <ul class="subtask-list" style="list-style:none; margin:6px 0 0; padding:0;">
@@ -529,10 +588,10 @@
           </div>
 
           <div class="task-actions">
-            <button class="add-subtask-btn" aria-label="Add subtask" title="Add subtask" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;">
+            <button class="add-subtask-btn" aria-label="${escHtml(tr('addSubtask'))}" title="${escHtml(tr('addSubtask'))}" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
-            <button class="task-delete" aria-label="Delete task">
+            <button class="task-delete" aria-label="${escHtml(tr('deleteTask'))}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -563,7 +622,7 @@
         });
 
         item.querySelector('.add-subtask-btn').addEventListener('click', () => {
-          const stText = prompt("Enter subtask description:");
+          const stText = prompt(tr('subtaskPrompt'));
           if (stText && stText.trim()) {
             if (!t.subtasks) t.subtasks = [];
             t.subtasks.push({ text: stText.trim(), done: false });
@@ -587,7 +646,7 @@
           setTimeout(() => {
             saveTasks();
             renderTasks();
-            showUndoToast('Task deleted');
+            showUndoToast(tr('taskDeleted'));
           }, 200);
         });
 
@@ -717,9 +776,13 @@
   if (viewToggleBtn) {
     viewToggleBtn.addEventListener('click', () => {
       currentViewMode = currentViewMode === 'list' ? 'calendar' : 'list';
-      viewToggleBtn.textContent = currentViewMode === 'list' ? 'Switch to Calendar View' : 'Switch to List View';
+      updateViewToggleText();
       renderTasks();
     });
+  }
+
+  function updateViewToggleText() {
+    if (viewToggleBtn) viewToggleBtn.textContent = tr(currentViewMode === 'list' ? 'switchToCalendar' : 'switchToList');
   }
 
   function renderCalendarView(tasksToRender) {
@@ -766,7 +829,7 @@
       header.style.paddingBottom = '5px';
       header.style.marginBottom = '5px';
       header.style.color = date === 'No Date' ? 'var(--color-text-muted)' : 'var(--color-primary)';
-      header.textContent = date;
+      header.textContent = date === 'No Date' ? tr('noDate') : formatDate(date);
       col.appendChild(header);
 
       grouped[date].forEach(t => {
@@ -779,7 +842,7 @@
         if (t.done) tDiv.style.opacity = '0.6';
 
         tDiv.innerHTML = `
-          <div style="${t.done ? 'text-decoration:line-through' : ''}">${parseMarkdown(t.text)}</div>
+          <div style="${t.done ? 'text-decoration:line-through' : ''}">${parseMarkdown(taskText(t.text))}</div>
           ${t.tag ? `<span style="font-size:9px; background:var(--color-surface-2); padding:1px 4px; border-radius:3px; margin-top:4px; display:inline-block;">${escHtml(t.tag)}</span>` : ''}
         `;
         col.appendChild(tDiv);
@@ -794,15 +857,15 @@
   // Add Role Button
   if ($('#add-role-btn')) {
     $('#add-role-btn').addEventListener('click', () => {
-      const roleName = prompt("Enter the name of the new role (e.g., 'Sports Coordinator'):");
+      const roleName = prompt(tr('rolePrompt'));
       if (roleName && roleName.trim() !== '') {
         const roleKey = roleName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
         if (!roleKey || !isSafeRoleKey(roleKey)) {
-           showToast('Please use letters or numbers in the role name');
+           showToast(tr('roleInvalid'));
            return;
         }
         if (ROLE_LABELS[roleKey]) {
-           showToast('Role already exists');
+           showToast(tr('roleExists'));
            return;
         }
         ROLE_LABELS[roleKey] = roleName.trim();
@@ -814,7 +877,7 @@
         saveTasks();
 
         addRoleTab(roleKey, roleName.trim()).click();
-        showToast('Role added');
+        showToast(tr('roleAdded'));
       }
     });
   }
@@ -890,7 +953,7 @@
       currentFreq = freq;
     }
     renderTasks();
-    showToast('Task added');
+    showToast(tr('taskAdded'));
   });
 
   // Clear completed
@@ -907,9 +970,9 @@
     if (removed > 0) {
       saveTasks();
       renderTasks();
-      showToast(`Cleared ${removed} completed task${removed > 1 ? 's' : ''}`);
+      showToast(tr('cleared', { n: removed }));
     } else {
-      showToast('No completed tasks to clear');
+      showToast(tr('noCompleted'));
     }
   });
 
@@ -918,25 +981,25 @@
     if (window.Analytics) window.Analytics.track('export_data', { export_type: 'pdf', role: currentRole });
     const roleTasks = tasks[currentRole] || [];
     if (roleTasks.length === 0) {
-      showToast('No tasks to export');
+      showToast(tr('noTasksExport'));
       return;
     }
 
-    const roleName = ROLE_LABELS[currentRole] || currentRole;
+    const roleName = roleLabel(currentRole);
     const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const dateStr = now.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
 
     // Build PDF using jsPDF-like manual approach with print
     const printWin = window.open('', '_blank', 'width=800,height=600');
     if (!printWin) {
-      showToast('Pop-up blocked. Please allow pop-ups.');
+      showToast(tr('popupBlocked'));
       return;
     }
 
     const groupedHtml = buildGroupedHtml(roleTasks, roleName, dateStr);
 
     printWin.document.write(`<!DOCTYPE html>
-<html><head><title>EduPlanner - ${escHtml(roleName)} Tasks</title>
+<html lang="${(I18N.locales[currentLang] || I18N.locales.en).html}"><head><meta charset="utf-8"><title>EduPlanner - ${escHtml(tr('roleTaskReport', { role: roleName }))}</title>
 <style>
   @import url('https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -961,8 +1024,8 @@
       <div class="pdf-brand-sub">Harmony Digital Consults Ltd</div>
     </div>
     <div class="pdf-meta">
-      <div class="pdf-role">${escHtml(roleName)} Task Report</div>
-      <div>Generated: ${dateStr}</div>
+      <div class="pdf-role">${escHtml(tr('roleTaskReport', { role: roleName }))}</div>
+      <div>${escHtml(tr('generated', { date: dateStr }))}</div>
     </div>
   </div>
   ${groupedHtml}
@@ -972,7 +1035,7 @@
   <script>window.onload = function() { window.print(); }<\/script>
 </body></html>`);
     printWin.document.close();
-    showToast('PDF ready — use Print dialog to save');
+    showToast(tr('pdfReady'));
   });
 
   function buildGroupedHtml(roleTasks, roleName, dateStr) {
@@ -980,15 +1043,15 @@
     ['daily', 'weekly', 'monthly'].forEach(freq => {
       const items = roleTasks.filter(t => t.freq === freq);
       if (items.length === 0) return;
-      html += `<h2>${freq} Tasks</h2>
+      html += `<h2>${escHtml(tr('freqTasks', { freq: tr(freq) }))}</h2>
       <table>
-        <thead><tr><th style="width:5%">#</th><th>Task</th><th style="width:15%">Status</th></tr></thead>
+        <thead><tr><th style="width:5%">#</th><th>${escHtml(tr('colTask'))}</th><th style="width:15%">${escHtml(tr('colStatus'))}</th></tr></thead>
         <tbody>`;
       items.forEach((t, i) => {
         html += `<tr>
           <td>${i + 1}</td>
-          <td>${escHtml(t.text)}</td>
-          <td class="${t.done ? 'status-done' : 'status-pending'}">${t.done ? 'Completed' : 'Pending'}</td>
+          <td>${escHtml(taskText(t.text))}</td>
+          <td class="${t.done ? 'status-done' : 'status-pending'}">${escHtml(tr(t.done ? 'statusDone' : 'statusPending'))}</td>
         </tr>`;
       });
       html += '</tbody></table>';
@@ -1001,35 +1064,35 @@
     if (window.Analytics) window.Analytics.track('export_data', { export_type: 'excel', role: currentRole });
     const roleTasks = tasks[currentRole] || [];
     if (roleTasks.length === 0) {
-      showToast('No tasks to export');
+      showToast(tr('noTasksExport'));
       return;
     }
 
     if (typeof XLSX === 'undefined') {
-      showToast('Excel library not loaded. Check your connection.');
+      showToast(tr('excelMissing'));
       return;
     }
 
-    const roleName = ROLE_LABELS[currentRole] || currentRole;
+    const roleName = roleLabel(currentRole);
     const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB');
+    const dateStr = now.toLocaleDateString(dateLocale());
 
     // Build worksheet data
     const wsData = [
-      ['EduPlanner - Task Report'],
-      ['Role:', roleName],
-      ['Date:', dateStr],
-      ['Generated by:', 'Harmony Digital Consults Ltd'],
+      ['EduPlanner - ' + tr('taskReport')],
+      [tr('roleLabel'), roleName],
+      [tr('dateLabel'), dateStr],
+      [tr('generatedBy'), 'Harmony Digital Consults Ltd'],
       [],
-      ['#', 'Task', 'Frequency', 'Status']
+      ['#', tr('colTask'), tr('colFrequency'), tr('colStatus')]
     ];
 
     roleTasks.forEach((t, i) => {
       wsData.push([
         i + 1,
-        t.text,
-        t.freq.charAt(0).toUpperCase() + t.freq.slice(1),
-        t.done ? 'Completed' : 'Pending'
+        taskText(t.text),
+        tr(t.freq),
+        tr(t.done ? 'statusDone' : 'statusPending')
       ]);
     });
 
@@ -1044,9 +1107,10 @@
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, roleName);
-    XLSX.writeFile(wb, `EduPlanner_${roleName.replace(/\s/g, '_')}_${dateStr.replace(/\//g, '-')}.xlsx`);
-    showToast('Excel file downloaded');
+    // Sheet names: max 31 chars, no : \ / ? * [ ]
+    XLSX.utils.book_append_sheet(wb, ws, roleName.replace(/[:\\/?*\[\]]/g, ' ').slice(0, 31));
+    XLSX.writeFile(wb, `EduPlanner_${roleName.replace(/[\s:\\/?*\[\]]/g, '_')}_${dateStr.replace(/[\/.]/g, '-')}.xlsx`);
+    showToast(tr('excelDownloaded'));
   });
 
 
@@ -1082,8 +1146,7 @@
         const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
 
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
-        const what = backupNotes ? 'all your current tasks and quick notes' : 'all your current tasks';
-        if (confirm(`Restore ${count} task(s) from this backup? This replaces ${what}.`)) {
+        if (confirm(tr(backupNotes ? 'restoreConfirmTasksNotes' : 'restoreConfirmTasks', { n: count }))) {
           tasks = importedTasks;
           // Make sure every restored role has a tab
           for (const role of Object.keys(tasks)) {
@@ -1105,10 +1168,10 @@
           renderTasks();
           hideDataNotice();
           if (window.Analytics) window.Analytics.track('import_data', { export_type: 'backup' });
-          showToast('Backup restored successfully');
+          showToast(tr('backupRestored'));
         }
       } catch (err) {
-        showToast('Error restoring backup. Invalid file.');
+        showToast(tr('backupError'));
       }
       e.target.value = ''; // reset
     };
@@ -1117,43 +1180,40 @@
 
 
   // ---------- Localization / i18n ----------
-  const translations = {
-    en: {
-      welcomeTitle: "Your Education Task Planner",
-      welcomeDesc: "Select your role, manage tasks by frequency, and export your progress as PDF or Excel.",
-      clearCompleted: "Clear completed"
-    },
-    fr: {
-      welcomeTitle: "Votre planificateur de tâches éducatives",
-      welcomeDesc: "Sélectionnez votre rôle, gérez les tâches par fréquence et exportez vos progrès au format PDF ou Excel.",
-      clearCompleted: "Effacer les terminées"
-    },
-    pidgin: {
-      welcomeTitle: "Your School Work Planner",
-      welcomeDesc: "Choose your work, arrange your task dem, and download everything as PDF or Excel.",
-      clearCompleted: "Clear the ones wey finish"
-    }
-  };
-
+  // Static text is marked in index.html with data-i18n (text),
+  // data-i18n-placeholder and data-i18n-aria-label.
   function applyLanguage(lang) {
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-      const key = el.getAttribute('data-i18n');
-      if (translations[lang] && translations[lang][key]) {
-        el.textContent = translations[lang][key];
-      }
-    });
+    currentLang = I18N.ui[lang] ? lang : 'en';
+    document.documentElement.lang = (I18N.locales[currentLang] || I18N.locales.en).html;
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = tr(el.dataset.i18nPlaceholder); });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(el => { el.setAttribute('aria-label', tr(el.dataset.i18nAriaLabel)); });
+    if (langSelect) langSelect.value = currentLang;
+
+    // Text built by the app
+    const themeToggle = $('[data-theme-toggle]');
+    if (themeToggle) {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      themeToggle.setAttribute('aria-label', tr(isDark ? 'themeToLight' : 'themeToDark'));
+    }
+    updateViewToggleText();
+    refreshConsentUI();
+    if (currentNotice) {
+      const kind = currentNotice;
+      currentNotice = null;
+      showDataNotice(kind);
+    }
+    renderTasks();
+    renderTrash();
   }
 
   const langSelect = $('#lang-select');
   if (langSelect) {
-    const savedLang = localStorage.getItem('eduplanner_lang') || 'en';
-    langSelect.value = savedLang;
-    applyLanguage(savedLang);
     if (window.Analytics) { window.Analytics.track('app_open', { app_version: '1.0.0' }); window.Analytics.page('Home'); }
 
     langSelect.addEventListener('change', (e) => {
       const lang = e.target.value;
-      localStorage.setItem('eduplanner_lang', lang);
+      try { localStorage.setItem(LANG_KEY, lang); } catch (err) { /* storage blocked */ }
     if (window.Analytics) window.Analytics.track('settings_change', { setting_key: 'language' });
       applyLanguage(lang);
     });
@@ -1173,10 +1233,10 @@
       Notification.requestPermission().then(perm => {
         if (perm === 'granted') {
           notifsBtn.style.display = 'none';
-          showToast('Notifications enabled!');
+          showToast(tr('notifEnabled'));
           checkDueTasks();
         } else {
-          showToast('Notifications denied.');
+          showToast(tr('notifDenied'));
         }
       });
     });
@@ -1200,8 +1260,8 @@
     }
 
     if (dueCount > 0) {
-      new Notification('EduPlanner Reminders', {
-        body: `You have ${dueCount} task(s) due today or overdue.`,
+      new Notification(tr('notifTitle'), {
+        body: tr('notifBody', { n: dueCount }),
         icon: 'icons/icon-192.png'
       });
     }
@@ -1274,9 +1334,9 @@
             clearInterval(pomoInterval);
             pomoRunning = false;
             pomoStart.textContent = '▶';
-            showToast('Time is up! Take a break.');
+            showToast(tr('timeUp'));
             if (hasNotifications && Notification.permission === "granted") {
-              new Notification('EduPlanner Timer', { body: 'Time is up! Take a 5 minute break.', icon: 'icons/icon-192.png' });
+              new Notification(tr('timerTitle'), { body: tr('timerBody'), icon: 'icons/icon-192.png' });
             }
           }
         }, 1000);
@@ -1340,7 +1400,7 @@
       root.setAttribute('data-theme', theme);
       localStorage.setItem('eduplanner_theme', theme);
     if (window.Analytics) window.Analytics.track('theme_change', { theme_name: theme });
-      toggle.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' mode');
+      toggle.setAttribute('aria-label', tr(theme === 'dark' ? 'themeToLight' : 'themeToDark'));
       updateToggleIcon(toggle, theme);
     });
   })();
@@ -1356,7 +1416,7 @@
   function showUndoToast(msg) {
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `${msg} <button class="btn-undo" style="margin-left: 10px; background:transparent; color:var(--color-primary-light); border:none; cursor:pointer; font-weight:bold; text-decoration:underline;">Undo</button>`;
+    toast.innerHTML = `${escHtml(msg)} <button class="btn-undo" style="margin-left: 10px; background:transparent; color:var(--color-primary-light); border:none; cursor:pointer; font-weight:bold; text-decoration:underline;">${escHtml(tr('undo'))}</button>`;
 
     toast.querySelector('.btn-undo').addEventListener('click', () => {
       if (lastDeletedTask && lastDeletedRole) {
@@ -1369,7 +1429,7 @@
         if (currentRole === lastDeletedRole) renderTasks();
         lastDeletedTask = null;
         toast.remove();
-        showToast('Task restored');
+        showToast(tr('taskRestored'));
       }
     });
 
@@ -1409,10 +1469,11 @@
     const { outcome } = await deferredPrompt.userChoice;
     deferredPrompt = null;
     installBtn.style.display = 'none';
-    if (outcome === 'accepted') showToast('App installed');
+    if (outcome === 'accepted') showToast(tr('appInstalled'));
   });
 
   // ---------- Analytics consent (opt-in) ----------
+  let refreshConsentUI = () => {};
   (function initAnalyticsConsent() {
     const A = window.Analytics;
     if (!A || !A.isAvailable || !A.isAvailable()) return; // not configured, or DNT/GPC set
@@ -1423,7 +1484,7 @@
 
     function refresh() {
       const consent = A.getConsent();
-      if (toggle) toggle.textContent = 'Usage stats: ' + (consent === 'granted' ? 'On' : 'Off');
+      if (toggle) toggle.textContent = tr(consent === 'granted' ? 'usageOn' : 'usageOff');
       if (banner) banner.hidden = consent !== null;
     }
 
@@ -1431,7 +1492,7 @@
       A.setConsent(granted);
       refresh();
       if (granted) A.track('settings_change', { setting_key: 'analytics_consent' });
-      showToast(granted ? 'Thanks! Anonymous usage stats are on.' : 'Usage stats are off.');
+      showToast(tr(granted ? 'consentOn' : 'consentOff'));
     }
 
     if (banner) {
@@ -1441,6 +1502,7 @@
     if (toggle) {
       toggle.addEventListener('click', () => choose(A.getConsent() !== 'granted'));
     }
+    refreshConsentUI = refresh;
     refresh();
   })();
 
@@ -1455,7 +1517,7 @@
   if (shareBtn) {
     shareBtn.addEventListener('click', () => {
       if (!tasks[currentRole] || tasks[currentRole].length === 0) {
-        showToast('No tasks to share for this role.');
+        showToast(tr('nothingToShare'));
         return;
       }
 
@@ -1466,9 +1528,9 @@
       url.searchParams.set('import', encoded);
 
       navigator.clipboard.writeText(url.toString()).then(() => {
-        showToast('Shareable link copied to clipboard!');
+        showToast(tr('linkCopied'));
       }).catch(() => {
-        prompt('Copy this link manually:', url.toString());
+        prompt(tr('copyManually'), url.toString());
       });
     });
   }
@@ -1483,7 +1545,7 @@
         const decoded = JSON.parse(decodeURIComponent(atob(importData)));
         const importedList = decoded ? sanitizeTaskList(decoded.data) : [];
         if (decoded && isSafeRoleKey(decoded.role) && importedList.length) {
-          if (confirm(`Import ${importedList.length} tasks into the "${ROLE_LABELS[decoded.role] || decoded.role}" role?`)) {
+          if (confirm(tr('importConfirm', { n: importedList.length, role: roleLabel(decoded.role) }))) {
 
             if (!tasks[decoded.role]) tasks[decoded.role] = [];
 
@@ -1515,14 +1577,14 @@
             updateAnalytics();
 
             setTimeout(() => {
-                showToast(`Imported ${addedCount} new tasks successfully.`);
+                showToast(tr('imported', { n: addedCount }));
             }, 500);
           } else {
              window.history.replaceState({}, document.title, window.location.pathname);
           }
         }
       } catch(e) {
-        showToast('Failed to import tasks from URL. Link may be invalid or broken.');
+        showToast(tr('importFailed'));
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
@@ -1586,37 +1648,37 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setTime(BACKUP_KEY, Date.now());
     if (currentNotice === 'backup-reminder' || currentNotice === 'storage-error') hideDataNotice();
-    showToast('Backup downloaded. Keep the file somewhere safe.');
+    showToast(tr('backupDownloaded'));
   }
 
   // Inline notice above the planner (one at a time, most important wins)
   const NOTICES = {
     'storage-error': {
       rank: 3,
-      text: 'Your latest changes could not be saved: this browser\'s storage is full or blocked. Download a backup now so nothing is lost.',
-      primary: ['Download backup', () => downloadBackup()],
-      secondary: ['Dismiss', () => hideDataNotice()]
+      text: 'noticeStorageError',
+      primary: ['downloadBackup', () => downloadBackup()],
+      secondary: ['dismiss', () => hideDataNotice()]
     },
     'unreadable': {
       rank: 2,
-      text: 'Your saved tasks could not be read, so EduPlanner started fresh. A copy of the old data was kept on this device. If you have a backup file, restore it now.',
-      primary: ['Restore backup', () => $('#import-backup-input').click()],
-      secondary: ['Dismiss', () => hideDataNotice()]
+      text: 'noticeUnreadable',
+      primary: ['restoreBackup', () => $('#import-backup-input').click()],
+      secondary: ['dismiss', () => hideDataNotice()]
     },
     'backup-reminder': {
       rank: 1,
-      text: 'Your tasks are only stored in this browser. It has been a while since your last backup. Download one so you don\'t lose your work if browser data is cleared.',
-      primary: ['Download backup', () => downloadBackup()],
-      secondary: ['Remind me later', () => {
+      text: 'noticeBackupReminder',
+      primary: ['downloadBackup', () => downloadBackup()],
+      secondary: ['remindLater', () => {
         setTime(SNOOZE_KEY, Date.now() + SNOOZE_DAYS * DAY_MS);
         hideDataNotice();
       }]
     },
     'restore-offer': {
       rank: 0,
-      text: 'New here, or moving from another device? If you have an EduPlanner backup file, you can restore it now.',
-      primary: ['Restore backup', () => $('#import-backup-input').click()],
-      secondary: ['No thanks', () => {
+      text: 'noticeRestoreOffer',
+      primary: ['restoreBackup', () => $('#import-backup-input').click()],
+      secondary: ['noThanks', () => {
         try { localStorage.setItem(RESTORE_OFFER_KEY, '1'); } catch (e) { /* ignore */ }
         hideDataNotice();
       }]
@@ -1631,9 +1693,9 @@
     if (currentNotice && NOTICES[currentNotice].rank > n.rank) return;
     currentNotice = kind;
     box.dataset.kind = kind;
-    $('#data-notice-text').textContent = n.text;
-    $('#data-notice-primary').textContent = n.primary[0];
-    $('#data-notice-secondary').textContent = n.secondary[0];
+    $('#data-notice-text').textContent = tr(n.text);
+    $('#data-notice-primary').textContent = tr(n.primary[0]);
+    $('#data-notice-secondary').textContent = tr(n.secondary[0]);
     box.hidden = false;
   }
 
@@ -1702,18 +1764,17 @@
       info.className = 'trash-info';
       const text = document.createElement('span');
       text.className = 'trash-text';
-      text.textContent = entry.text;
+      text.textContent = taskText(entry.text);
       const meta = document.createElement('span');
       meta.className = 'trash-meta';
-      const roleLabel = ROLE_LABELS[entry.role] || entry.role || 'Unknown role';
-      const when = new Date(entry.deletedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-      meta.textContent = `${roleLabel} · ${entry.freq || 'daily'} · deleted ${when}`;
+      const when = new Date(entry.deletedAt).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
+      meta.textContent = tr('trashMeta', { role: roleLabel(entry.role), freq: tr(entry.freq || 'daily'), date: when });
       info.append(text, meta);
 
       const restore = document.createElement('button');
       restore.type = 'button';
       restore.className = 'btn btn-outline btn-sm';
-      restore.textContent = 'Restore';
+      restore.textContent = tr('restore');
       restore.addEventListener('click', () => restoreFromTrash(index));
 
       li.append(info, restore);
@@ -1734,7 +1795,7 @@
     saveArchive();
     updateAnalytics();
     renderTasks();
-    showToast(`Restored to ${ROLE_LABELS[role] || role}`);
+    showToast(tr('restoredTo', { role: roleLabel(role) }));
   }
 
   if (trashBtn && trashPanel) {
@@ -1745,10 +1806,10 @@
     });
     $('#trash-empty').addEventListener('click', () => {
       if (!archive.length) return;
-      if (confirm(`Permanently delete ${archive.length} task(s)? This cannot be undone.`)) {
+      if (confirm(tr('emptyConfirm', { n: archive.length }))) {
         archive = [];
         saveArchive();
-        showToast('Recently deleted emptied');
+        showToast(tr('trashEmptied'));
       }
     });
   }
@@ -1758,9 +1819,9 @@
   checkRecurringResets();
   saveArchive(); // writes back the pruned archive
   updateAnalytics();
-  renderTasks();
   checkDueTasks();
   checkDataNotices();
+  applyLanguage(currentLang); // translates the page and renders tasks
   setTimeout(checkUrlImport, 300);
 
 })();

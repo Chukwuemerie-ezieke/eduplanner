@@ -287,6 +287,71 @@ test('warns when changes cannot be saved (storage full)', async (browser, base) 
   await context.close();
 });
 
+// ---------- Languages ----------
+// English UI strings that should never be visible once another language is chosen
+async function leftoverEnglish(page, lang) {
+  return page.evaluate((lang) => {
+    // Toasts shown before the switch are still in the old language; ignore them
+    document.getElementById('toast-container').replaceChildren();
+    const { ui } = window.EDU_I18N;
+    const english = Object.keys(ui.en)
+      .filter(k => ui[lang][k] !== ui.en[k] && ui.en[k].length >= 3 && !ui.en[k].includes('{'))
+      .map(k => ui.en[k]);
+    const visible = [...document.querySelectorAll('body *')]
+      .filter(el => el.offsetParent !== null || el.tagName === 'OPTION')
+      .flatMap(el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()))
+      .concat([...document.querySelectorAll('[placeholder]')].map(el => el.placeholder))
+      .concat([...document.querySelectorAll('[aria-label]')].map(el => el.getAttribute('aria-label')))
+      .filter(Boolean);
+    return english.filter(e => visible.includes(e));
+  }, lang);
+}
+
+test('French: whole interface and built-in tasks are translated', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.fill('#new-task-input', 'My own task');
+  await page.press('#new-task-input', 'Enter');
+  await page.selectOption('#lang-select', 'fr');
+  assert.strictEqual(await page.getAttribute('html', 'lang'), 'fr');
+  assert.strictEqual(await page.textContent('.welcome-title'), 'Votre planificateur de tâches scolaires');
+  await page.getByText("Faire l'appel en classe").waitFor();
+  await page.getByText('My own task').waitFor(); // typed tasks are left as written
+  assert.deepStrictEqual(await leftoverEnglish(page, 'fr'), [], 'English text left in French UI');
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.strictEqual(await page.inputValue('#lang-select'), 'fr', 'choice remembered');
+  await page.getByText("Faire l'appel en classe").waitFor();
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('Pidgin: whole interface and built-in tasks are translated', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.selectOption('#lang-select', 'pidgin');
+  assert.strictEqual(await page.getAttribute('html', 'lang'), 'pcm');
+  await page.getByText('Mark class register').waitFor();
+  await page.click('.freq-tab[data-freq="all"]');
+  assert.deepStrictEqual(await leftoverEnglish(page, 'pidgin'), [], 'English text left in Pidgin UI');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('French browsers start in French; search finds translated tasks', async (browser, base) => {
+  const context = await browser.newContext({ locale: 'fr-FR', serviceWorkers: 'block' });
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(base + '/');
+  await page.waitForSelector('#task-list .task-item');
+  assert.strictEqual(await page.inputValue('#lang-select'), 'fr');
+  await page.fill('#search-input', 'appel');
+  await page.getByText("Faire l'appel en classe").waitFor();
+  assert.strictEqual(await page.locator('#task-list .task-item').count(), 1);
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
 // ---------- Analytics consent (opt-in) ----------
 const isTracker = (url) => /posthog\.com|cloudflareinsights\.com/.test(url);
 

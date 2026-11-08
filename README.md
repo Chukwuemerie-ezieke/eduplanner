@@ -60,6 +60,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 | **Excel Export** | Download task data as `.xlsx` spreadsheets |
 | **Works Offline (PWA)** | Install on any phone or computer — full functionality without internet |
 | **Dark Mode** | Auto-detects system preference with manual toggle |
+| **3 Languages** | English, French and Nigerian Pidgin, including all built-in tasks, exports and messages. French browsers start in French |
 | **No Signup Required** | Zero accounts, zero cost, no personal data collected (see [Privacy](#privacy-preserving-analytics)) |
 | **localStorage** | Data persists across sessions on the same device |
 | **Backups & Recovery** | One-file backups (tasks, custom roles, notes), backup reminders, and a 30-day "Recently deleted" bin |
@@ -132,6 +133,7 @@ eduplanner/
 ├── index.html          # Main HTML structure
 ├── style.css           # All styles (light + dark mode)
 ├── app.js              # App logic, task management, exports
+├── i18n.js             # Translations (English, French, Nigerian Pidgin)
 ├── sw.js               # Service worker for offline support (bump CACHE_VERSION on release)
 ├── analytics.js        # Optional, privacy-filtered analytics
 ├── config.js           # Analytics settings
@@ -166,6 +168,17 @@ npm test
 They load the app in Chromium and check that tasks render, tasks and subtasks can be added, shared links and backups are validated, custom roles work, and the app runs offline. GitHub Actions runs them on every pull request.
 
 **Releasing:** bump `CACHE_VERSION` in `sw.js` whenever you deploy, so installed copies drop their old cache.
+
+---
+
+## Languages
+
+All interface text lives in `i18n.js`:
+
+- `ui.en`, `ui.fr`, `ui.pidgin`: every button, message and label. `{name}` placeholders are filled in by the app.
+- `tasks`: translations of the built-in tasks, keyed by their English text. Built-in tasks are stored in English and translated when shown, so tasks people type themselves are never changed.
+
+**To add a language:** copy the `en` block in `ui` to a new key (e.g. `ha`), translate it, add that language to each entry in `tasks`, and add a `locales` entry and an `<option>` in the language picker in `index.html`. The smoke tests show any English left on screen.
 
 ---
 
