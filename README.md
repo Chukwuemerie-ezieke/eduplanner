@@ -58,6 +58,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 | **Custom Tasks** | Add your own tasks to any frequency category, and edit any task's text, frequency, due date or tag |
 | **PDF Export** | Generate branded, printable task reports |
 | **Excel Export** | Download task data as `.xlsx` spreadsheets |
+| **Term Report** | Printable record of completed tasks over any date range: summary, week-by-week progress, per-task completion, comments box and signature lines for staff, HOD and principal |
 | **Works Offline (PWA)** | Install on any phone or computer — full functionality without internet |
 | **Dark Mode** | Auto-detects system preference with manual toggle |
 | **3 Languages** | English, French and Nigerian Pidgin, including all built-in tasks, exports and messages. French browsers start in French |
@@ -224,7 +225,7 @@ Monthly: activity reports, wellness workshops, career guidance
 2. **Switch frequency** — Daily, Weekly, Monthly, or All
 3. **Check off tasks** as you complete them
 4. **Add custom tasks** using the input field, or tap the pencil on any task to edit it
-5. **Export** your task list as PDF or Excel when needed
+5. **Export** your task list as PDF or Excel when needed, or create a **Term report** for supervision and appraisals
 6. **Clear completed** tasks to keep your list clean. Deleted or cleared tasks can be restored from **Recently deleted** for 30 days
 
 Data is saved automatically in your browser. It persists across sessions but stays entirely on your device, so **clearing browser data or switching devices loses it unless you have a backup**:
