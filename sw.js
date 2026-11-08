@@ -6,7 +6,7 @@
    Bump CACHE_VERSION on every release to clear old caches.
    ======================================== */
 
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = 'eduplanner-' + CACHE_VERSION;
 const ASSETS = [
   './',

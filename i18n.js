@@ -180,6 +180,24 @@
       emptyConfirm: 'Permanently delete {n} task(s)? This cannot be undone.',
       trashEmptied: 'Recently deleted emptied',
 
+      // School terms
+      schoolTerms: "School terms",
+      setTerms: "Set school terms",
+      schoolTermsHint: "Set your term dates once. Progress isn't recorded during holidays or the mid-term break, and the term report uses these dates. Leave a term empty if you don't need it.",
+      term1: "First term",
+      term2: "Second term",
+      term3: "Third term",
+      termStarts: "Term starts",
+      termEnds: "Term ends",
+      breakStarts: "Mid-term break starts",
+      breakEnds: "Mid-term break ends",
+      termWeek: "{term} · Week {week} of {total}",
+      midTermBreak: "{term} · Mid-term break",
+      holiday: "Holiday",
+      holidayNext: "Holiday · {term} starts {date}",
+      historyPaused: "Progress isn't recorded during holidays and the mid-term break. Click to change term dates.",
+      termsSaved: "School terms saved",
+
       // Term report
       termReport: "Term report",
       termReportTitle: "Create a term report",
@@ -385,6 +403,24 @@
       emptyConfirm: 'Supprimer définitivement {n} tâche(s) ? Cette action est irréversible.',
       trashEmptied: 'Corbeille vidée',
 
+      // School terms
+      schoolTerms: "Trimestres scolaires",
+      setTerms: "Définir les trimestres",
+      schoolTermsHint: "Saisissez une fois les dates de vos trimestres. La progression n'est pas enregistrée pendant les vacances et les congés de mi-trimestre, et le bilan utilise ces dates. Laissez un trimestre vide si vous n'en avez pas besoin.",
+      term1: "Premier trimestre",
+      term2: "Deuxième trimestre",
+      term3: "Troisième trimestre",
+      termStarts: "Début du trimestre",
+      termEnds: "Fin du trimestre",
+      breakStarts: "Début des congés de mi-trimestre",
+      breakEnds: "Fin des congés de mi-trimestre",
+      termWeek: "{term} · Semaine {week} sur {total}",
+      midTermBreak: "{term} · Congés de mi-trimestre",
+      holiday: "Vacances",
+      holidayNext: "Vacances · {term} : rentrée le {date}",
+      historyPaused: "La progression n'est pas enregistrée pendant les vacances et les congés de mi-trimestre. Cliquez pour modifier les dates.",
+      termsSaved: "Trimestres enregistrés",
+
       // Term report
       termReport: "Bilan du trimestre",
       termReportTitle: "Créer un bilan de trimestre",
@@ -586,6 +622,24 @@
       restoredTo: 'E don go back to {role}',
       emptyConfirm: 'You wan delete {n} task(s) forever? You no go fit bring dem back.',
       trashEmptied: 'Everything don clear',
+
+      // School terms
+      schoolTerms: "School terms",
+      setTerms: "Set school terms",
+      schoolTermsHint: "Put your term dates once. We no go record progress for holiday or mid-term break, and the term report go use these dates. Leave any term empty if you no need am.",
+      term1: "First term",
+      term2: "Second term",
+      term3: "Third term",
+      termStarts: "Term start",
+      termEnds: "Term end",
+      breakStarts: "Mid-term break start",
+      breakEnds: "Mid-term break end",
+      termWeek: "{term} · Week {week} of {total}",
+      midTermBreak: "{term} · Mid-term break",
+      holiday: "Holiday",
+      holidayNext: "Holiday · {term} go start {date}",
+      historyPaused: "We no dey record progress for holiday and mid-term break. Click am to change term dates.",
+      termsSaved: "School terms don save",
 
       // Term report
       termReport: "Term report",

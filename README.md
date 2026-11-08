@@ -59,6 +59,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 | **PDF Export** | Generate branded, printable task reports |
 | **Excel Export** | Download task data as `.xlsx` spreadsheets |
 | **Term Report** | Printable record of completed tasks over any date range: summary, week-by-week progress, per-task completion, comments box and signature lines for staff, HOD and principal |
+| **School Terms** | Set the three term dates and mid-term breaks once: the app shows the current term and week, pauses progress tracking during holidays, and the term report picks the term automatically |
 | **Works Offline (PWA)** | Install on any phone or computer — full functionality without internet |
 | **Dark Mode** | Auto-detects system preference with manual toggle |
 | **3 Languages** | English, French and Nigerian Pidgin, including all built-in tasks, exports and messages. French browsers start in French |

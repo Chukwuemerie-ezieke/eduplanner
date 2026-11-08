@@ -563,6 +563,93 @@ test('history is included in backups and restored', async (browser, base) => {
   await other.context.close();
 });
 
+// ---------- School terms ----------
+const isoDaysAhead = (n) => isoDaysAgo(-n);
+
+test('school terms: set in the dialog, chip shows the term week', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  assert.strictEqual((await page.textContent('#term-chip')).trim(), 'Set school terms');
+  await page.click('#term-chip');
+  // First term started 20 days ago (so we are in week 3) and lasts 13 weeks
+  await answerDialog(page, { start0: isoDaysAgo(20), end0: isoDaysAhead(70) });
+  await page.getByText('School terms saved').waitFor();
+  assert.strictEqual((await page.textContent('#term-chip')).trim(), 'First term · Week 3 of 13');
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.strictEqual((await page.textContent('#term-chip')).trim(), 'First term · Week 3 of 13', 'saved');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('school terms: mid-term break and holidays are shown and not recorded', async (browser, base) => {
+  const yesterday = isoDaysAgo(1);
+  const terms = [
+    { start: isoDaysAgo(40), end: isoDaysAhead(40), breakStart: isoDaysAgo(3), breakEnd: isoDaysAhead(3) },
+    null,
+    null
+  ];
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, [terms, yesterday]]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_terms', JSON.stringify(terms));
+      localStorage.setItem('eduplanner_tasks', JSON.stringify({ teacher: [
+        { id: '1', text: 'Take class attendance', freq: 'daily', done: true }
+      ] }));
+      localStorage.setItem('eduplanner_last_opened', JSON.stringify({ daily: yesterday, weekly: 'x', monthly: 'y' }));
+    }
+  }, [terms, yesterday]);
+  assert.strictEqual((await page.textContent('#term-chip')).trim(), 'First term · Mid-term break');
+  const history = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_history') || '[]'));
+  assert.deepStrictEqual(history, [], 'nothing recorded for a day in the mid-term break');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('school terms: holiday chip names the next term', async (browser, base) => {
+  const terms = [{ start: isoDaysAgo(100), end: isoDaysAgo(10) }, { start: isoDaysAhead(10), end: isoDaysAhead(100) }, null];
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, terms]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_terms', JSON.stringify(terms));
+    }
+  }, terms);
+  const chip = (await page.textContent('#term-chip')).trim();
+  assert.ok(chip.startsWith('Holiday · Second term starts'), chip);
+  assert.ok(await page.locator('#term-chip.holiday').count() === 1);
+  // The term report defaults to the last term, and names it
+  await page.click('#term-report-btn');
+  assert.strictEqual(await page.inputValue('#app-dialog [name="from"]'), terms[0].start);
+  assert.strictEqual(await page.inputValue('#app-dialog [name="to"]'), terms[0].end);
+  await answerDialog(page, {}, { cancel: true });
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('school terms: term report title names the term', async (browser, base) => {
+  const terms = [{ start: isoDaysAgo(30), end: isoDaysAhead(60) }, null, null];
+  const day = isoDaysAgo(5);
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, [terms, day]]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_terms', JSON.stringify(terms));
+      localStorage.setItem('eduplanner_history', JSON.stringify([
+        { role: 'teacher', freq: 'daily', period: day, date: day, d: ['Take class attendance'], p: [] }
+      ]));
+    }
+  }, [terms, day]);
+  await page.click('#term-report-btn');
+  const popupPromise = context.waitForEvent('page');
+  await answerDialog(page);
+  const report = await popupPromise;
+  await report.waitForLoadState('domcontentloaded');
+  assert.strictEqual((await report.textContent('h1')).trim(), 'Term Report · First term');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
 // ---------- Analytics consent (opt-in) ----------
 const isTracker = (url) => /posthog\.com|cloudflareinsights\.com/.test(url);
 
