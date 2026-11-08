@@ -58,6 +58,133 @@
     return d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  // ---------- In-app dialog (replaces the browser's prompt/confirm) ----------
+  // openDialog({ title, message, fields, okLabel, cancel, danger })
+  //   fields: [{ name, label, type: 'text'|'date'|'select', value, options, placeholder,
+  //              required, readonly, maxlength, row }]  (row: fields sharing a row number sit side by side)
+  // Resolves to { name: value, ... } on OK, or null on cancel / Escape / backdrop click.
+  function openDialog({ title, message = '', fields = [], okLabel, cancel = true, danger = false }) {
+    const dlg = document.getElementById('app-dialog');
+
+    // Very old browsers without <dialog>: fall back to the native boxes
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      if (!fields.length) return Promise.resolve(confirm([title, message].filter(Boolean).join('\n\n')) ? {} : null);
+      const values = {};
+      for (const f of fields) {
+        if (f.type === 'select' || f.type === 'date') { values[f.name] = f.value || ''; continue; }
+        const v = prompt(f.label, f.value || '');
+        if (v === null) return Promise.resolve(null);
+        values[f.name] = v;
+      }
+      return Promise.resolve(values);
+    }
+
+    $('#app-dialog-title').textContent = title;
+    $('#app-dialog-message').textContent = message;
+    const fieldsBox = $('#app-dialog-fields');
+    fieldsBox.innerHTML = '';
+    const inputs = {};
+    const rows = {};
+
+    fields.forEach(f => {
+      const label = document.createElement('label');
+      label.className = 'app-dialog-field';
+      const caption = document.createElement('span');
+      caption.textContent = f.label;
+      let input;
+      if (f.type === 'select') {
+        input = document.createElement('select');
+        (f.options || []).forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.value;
+          opt.textContent = o.label;
+          input.appendChild(opt);
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = f.type || 'text';
+        if (f.placeholder) input.placeholder = f.placeholder;
+        if (f.maxlength) input.maxLength = f.maxlength;
+        if (f.readonly) {
+          input.readOnly = true;
+          input.addEventListener('focus', () => input.select());
+        }
+        input.autocomplete = 'off';
+      }
+      input.name = f.name;
+      input.value = f.value || '';
+      if (f.required) input.setAttribute('aria-required', 'true');
+      inputs[f.name] = input;
+      label.append(caption, input);
+
+      if (f.row) {
+        if (!rows[f.row]) {
+          rows[f.row] = document.createElement('div');
+          rows[f.row].className = 'app-dialog-row';
+          fieldsBox.appendChild(rows[f.row]);
+        }
+        rows[f.row].appendChild(label);
+      } else {
+        fieldsBox.appendChild(label);
+      }
+    });
+
+    const okBtn = $('#app-dialog-ok');
+    const cancelBtn = $('#app-dialog-cancel');
+    okBtn.textContent = okLabel || tr('ok');
+    okBtn.classList.toggle('btn-danger', danger);
+    cancelBtn.textContent = tr('cancel');
+    cancelBtn.hidden = !cancel;
+
+    return new Promise(resolve => {
+      const ac = new AbortController();
+      const opts = { signal: ac.signal };
+      // Resolve right away (not on the later 'close' event) so the caller's
+      // follow-up runs before the user can do anything else
+      const finish = (result) => {
+        ac.abort();
+        if (dlg.open) dlg.close();
+        resolve(result);
+      };
+
+      dlg.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        for (const f of fields) {
+          const input = inputs[f.name];
+          if (f.required && !input.value.trim()) {
+            input.setAttribute('aria-invalid', 'true');
+            input.focus();
+            return;
+          }
+          input.removeAttribute('aria-invalid');
+        }
+        const values = {};
+        for (const name in inputs) values[name] = inputs[name].value;
+        finish(values);
+      }, opts);
+      cancelBtn.addEventListener('click', () => finish(null), opts);
+      // Click on the dimmed backdrop (outside the box) cancels
+      dlg.addEventListener('click', (e) => { if (e.target === dlg) finish(null); }, opts);
+      // Escape key
+      dlg.addEventListener('close', () => finish(null), opts);
+
+      dlg.showModal();
+      // Focus the first field; for destructive confirmations focus Cancel
+      const first = fields.length ? inputs[fields[0].name] : (danger && cancel ? cancelBtn : okBtn);
+      first.focus();
+      if (first.select && fields.length && !fields[0].readonly && first.type === 'text') first.select();
+    });
+  }
+
+  async function askText(opts) {
+    const r = await openDialog({ ...opts, fields: [{ name: 'value', required: true, maxlength: 200, ...opts.field }] });
+    return r ? r.value.trim() : null;
+  }
+
+  async function askConfirm(opts) {
+    return (await openDialog(opts)) !== null;
+  }
+
   // ---------- Pre-populated tasks by role and frequency ----------
   const DEFAULT_TASKS = {
     teacher: {
@@ -478,6 +605,33 @@
   }
 
 
+  // Edit a task's text, due date, tag and frequency
+  async function editTask(task) {
+    const shownText = taskText(task.text);
+    const r = await openDialog({
+      title: tr('editTask'),
+      okLabel: tr('save'),
+      fields: [
+        { name: 'text', label: tr('colTask'), value: shownText, required: true, maxlength: 200 },
+        { name: 'freq', label: tr('taskFrequency'), type: 'select', value: task.freq, row: 1,
+          options: FREQS.map(f => ({ value: f, label: tr(f) })) },
+        { name: 'dueDate', label: tr('dueDateLabel'), type: 'date', value: task.dueDate || '', row: 1 },
+        { name: 'tag', label: tr('tagLabel'), value: task.tag || '', placeholder: '#tag', maxlength: 40 }
+      ]
+    });
+    if (!r) return;
+
+    const newText = r.text.trim();
+    // Unchanged built-in tasks keep their English original so they stay translated
+    if (newText && newText !== shownText) task.text = newText;
+    task.freq = FREQS.includes(r.freq) ? r.freq : task.freq;
+    task.dueDate = DATE_RE.test(r.dueDate) ? r.dueDate : null;
+    task.tag = r.tag.trim().replace(/^#/, '').slice(0, 40) || null;
+    saveTasks();
+    renderTasks();
+    showToast(tr('taskUpdated'));
+  }
+
   function renderTagFilters(roleTasks) {
     const container = document.getElementById('tag-filters');
     if (!container) return;
@@ -583,11 +737,17 @@
               <li style="display:flex; align-items:center; gap:6px; font-size:13px;">
                 <input type="checkbox" class="subtask-check" id="${checkId}-st${sidx}" data-sidx="${sidx}" ${st.done ? 'checked' : ''}>
                 <label for="${checkId}-st${sidx}" style="${st.done ? 'text-decoration:line-through; opacity:0.6;' : ''}">${escHtml(st.text)}</label>
+                <button type="button" class="subtask-remove" data-sidx="${sidx}" aria-label="${escHtml(tr('removeSubtask'))}" title="${escHtml(tr('removeSubtask'))}">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </li>`).join('')}
             </ul>` : ''}
           </div>
 
           <div class="task-actions">
+            <button type="button" class="task-edit" aria-label="${escHtml(tr('editTask'))}" title="${escHtml(tr('editTask'))}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </button>
             <button class="add-subtask-btn" aria-label="${escHtml(tr('addSubtask'))}" title="${escHtml(tr('addSubtask'))}" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
@@ -621,15 +781,29 @@
           });
         });
 
-        item.querySelector('.add-subtask-btn').addEventListener('click', () => {
-          const stText = prompt(tr('subtaskPrompt'));
-          if (stText && stText.trim()) {
+        item.querySelectorAll('.subtask-remove').forEach(btn => {
+          btn.addEventListener('click', () => {
+            t.subtasks.splice(Number(btn.dataset.sidx), 1);
+            saveTasks();
+            renderTasks();
+          });
+        });
+
+        item.querySelector('.add-subtask-btn').addEventListener('click', async () => {
+          const stText = await askText({
+            title: tr('addSubtask'),
+            okLabel: tr('add'),
+            field: { label: tr('subtaskLabel') }
+          });
+          if (stText) {
             if (!t.subtasks) t.subtasks = [];
-            t.subtasks.push({ text: stText.trim(), done: false });
+            t.subtasks.push({ text: stText.slice(0, 300), done: false });
             saveTasks();
             renderTasks();
           }
         });
+
+        item.querySelector('.task-edit').addEventListener('click', () => editTask(t));
 
         // Delete event
 
@@ -856,9 +1030,13 @@
 
   // Add Role Button
   if ($('#add-role-btn')) {
-    $('#add-role-btn').addEventListener('click', () => {
-      const roleName = prompt(tr('rolePrompt'));
-      if (roleName && roleName.trim() !== '') {
+    $('#add-role-btn').addEventListener('click', async () => {
+      const roleName = await askText({
+        title: tr('addRoleTitle'),
+        okLabel: tr('add'),
+        field: { label: tr('roleNameLabel'), placeholder: tr('rolePlaceholder'), maxlength: 60 }
+      });
+      if (roleName) {
         const roleKey = roleName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
         if (!roleKey || !isSafeRoleKey(roleKey)) {
            showToast(tr('roleInvalid'));
@@ -919,7 +1097,7 @@
     e.preventDefault();
     const text = taskInput.value.trim();
     const dueDate = $('#new-task-date').value;
-    const tag = $('#new-task-tag') ? $('#new-task-tag').value.trim() : '';
+    const tag = $('#new-task-tag') ? $('#new-task-tag').value.trim().replace(/^#/, '').slice(0, 40) : '';
     if (!text) return;
 
     const freq = taskFreqSelect.value;
@@ -1127,7 +1305,7 @@
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const raw = JSON.parse(event.target.result);
         // v2 backups wrap the data: { app: 'EduPlanner', version: 2, tasks, customRoles, notes }
@@ -1146,7 +1324,13 @@
         const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
 
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
-        if (confirm(tr(backupNotes ? 'restoreConfirmTasksNotes' : 'restoreConfirmTasks', { n: count }))) {
+        const ok = await askConfirm({
+          title: tr('restoreBackup'),
+          message: tr(backupNotes ? 'restoreConfirmTasksNotes' : 'restoreConfirmTasks', { n: count }),
+          okLabel: tr('restore'),
+          danger: true
+        });
+        if (ok) {
           tasks = importedTasks;
           // Make sure every restored role has a tab
           for (const role of Object.keys(tasks)) {
@@ -1530,13 +1714,18 @@
       navigator.clipboard.writeText(url.toString()).then(() => {
         showToast(tr('linkCopied'));
       }).catch(() => {
-        prompt(tr('copyManually'), url.toString());
+        openDialog({
+          title: tr('shareRole'),
+          fields: [{ name: 'url', label: tr('copyManually'), value: url.toString(), readonly: true }],
+          okLabel: tr('close'),
+          cancel: false
+        });
       });
     });
   }
 
   // Check URL for import on load
-  function checkUrlImport() {
+  async function checkUrlImport() {
     const urlParams = new URLSearchParams(window.location.search);
     const importData = urlParams.get('import');
 
@@ -1545,7 +1734,12 @@
         const decoded = JSON.parse(decodeURIComponent(atob(importData)));
         const importedList = decoded ? sanitizeTaskList(decoded.data) : [];
         if (decoded && isSafeRoleKey(decoded.role) && importedList.length) {
-          if (confirm(tr('importConfirm', { n: importedList.length, role: roleLabel(decoded.role) }))) {
+          const ok = await askConfirm({
+            title: tr('importTitle'),
+            message: tr('importConfirm', { n: importedList.length, role: roleLabel(decoded.role) }),
+            okLabel: tr('importBtn')
+          });
+          if (ok) {
 
             if (!tasks[decoded.role]) tasks[decoded.role] = [];
 
@@ -1804,9 +1998,15 @@
       trashBtn.setAttribute('aria-expanded', String(!trashPanel.hidden));
       renderTrash();
     });
-    $('#trash-empty').addEventListener('click', () => {
+    $('#trash-empty').addEventListener('click', async () => {
       if (!archive.length) return;
-      if (confirm(tr('emptyConfirm', { n: archive.length }))) {
+      const ok = await askConfirm({
+        title: tr('trashEmptyTitle'),
+        message: tr('emptyConfirm', { n: archive.length }),
+        okLabel: tr('deleteForever'),
+        danger: true
+      });
+      if (ok) {
         archive = [];
         saveArchive();
         showToast(tr('trashEmptied'));

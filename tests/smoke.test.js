@@ -47,9 +47,23 @@ async function openApp(browser, base, { query = '', initScript, serviceWorkers =
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('dialog', (d) => { errors.push('native ' + d.type() + ' dialog: ' + d.message()); d.dismiss(); });
   await page.goto(base + '/' + query);
   await page.waitForSelector('#task-list .task-item');
   return { context, page, errors, external };
+}
+
+// Fills the in-app dialog's fields by name, then presses OK (or Cancel)
+async function answerDialog(page, values = {}, { cancel = false } = {}) {
+  const dlg = page.locator('#app-dialog[open]');
+  await dlg.waitFor();
+  for (const [name, value] of Object.entries(values)) {
+    const field = dlg.locator(`[name="${name}"]`);
+    if (await field.evaluate((el) => el.tagName) === 'SELECT') await field.selectOption(value);
+    else await field.fill(value);
+  }
+  await dlg.locator(cancel ? '#app-dialog-cancel' : '#app-dialog-ok').click();
+  await dlg.waitFor({ state: 'hidden' });
 }
 
 test('loads with default tasks and no errors', async (browser, base) => {
@@ -70,8 +84,8 @@ test('adds a task', async (browser, base) => {
 
 test('adds and completes a subtask', async (browser, base) => {
   const { context, page, errors } = await openApp(browser, base);
-  page.once('dialog', (d) => d.accept('Print handouts'));
   await page.locator('#task-list .task-item').first().locator('.add-subtask-btn').click();
+  await answerDialog(page, { value: 'Print handouts' });
   const sub = page.locator('#task-list .task-item').first().locator('.subtask-check');
   await sub.check();
   assert.ok(await page.locator('#task-list .task-item').first().locator('.subtask-check').isChecked());
@@ -86,7 +100,7 @@ test('shared link cannot inject HTML', async (browser, base) => {
   };
   const encoded = Buffer.from(encodeURIComponent(JSON.stringify(payload))).toString('base64');
   const { context, page, errors } = await openApp(browser, base, { query: '?import=' + encodeURIComponent(encoded) });
-  page.on('dialog', (d) => d.accept());
+  await answerDialog(page);
   await page.getByText('Imported task').waitFor();
   assert.strictEqual(await page.evaluate(() => window.__pwned), undefined);
   assert.strictEqual(await page.locator('#task-list img').count(), 0);
@@ -109,8 +123,8 @@ test('rejects an invalid backup file', async (browser, base) => {
 test('adds a custom role without reloading', async (browser, base) => {
   const { context, page, errors } = await openApp(browser, base);
   await page.evaluate(() => { window.__noReload = true; });
-  page.once('dialog', (d) => d.accept('Sports Coordinator'));
   await page.click('#add-role-btn');
+  await answerDialog(page, { value: 'Sports Coordinator' });
   await page.locator('.tab[data-role="sports_coordinator"].active').waitFor();
   assert.strictEqual(await page.evaluate(() => window.__noReload), true, 'page did not reload');
   assert.deepStrictEqual(errors, []);
@@ -145,6 +159,97 @@ test('fits a phone screen without sideways scrolling', async (browser, base) => 
   await page.waitForSelector('#task-list .task-item');
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(width <= 390, 'page is ' + width + 'px wide on a 390px phone');
+  await context.close();
+});
+
+// ---------- Editing & dialogs ----------
+test('edits a task: text, frequency, due date and tag', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const first = page.locator('#task-list .task-item').first();
+  await first.hover();
+  await first.locator('.task-edit').click();
+  assert.strictEqual(await page.inputValue('#app-dialog [name="text"]'), 'Review lesson plan for today');
+  const box = await page.locator('#app-dialog').boundingBox();
+  const vw = page.viewportSize().width;
+  assert.ok(Math.abs(box.x + box.width / 2 - vw / 2) < 2, 'dialog is centred');
+  await answerDialog(page, { text: 'Review **Year 9** lesson plan', freq: 'weekly', dueDate: '2026-12-01', tag: '#urgent' });
+  await page.click('.freq-tab[data-freq="weekly"]');
+  const edited = page.locator('#task-list .task-item', { hasText: 'Year 9' });
+  await edited.waitFor();
+  assert.strictEqual(await edited.locator('strong').textContent(), 'Year 9');
+  assert.strictEqual((await edited.locator('.task-tag').textContent()).trim(), 'urgent');
+  await page.reload();
+  await page.click('.freq-tab[data-freq="weekly"]');
+  await page.locator('#task-list .task-item', { hasText: 'Year 9' }).waitFor();
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('edit dialog: Cancel, Escape and empty text change nothing', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const first = page.locator('#task-list .task-item').first();
+  await first.hover();
+  await first.locator('.task-edit').click();
+  await answerDialog(page, { text: 'Should not be saved' }, { cancel: true });
+  await first.hover();
+  await first.locator('.task-edit').click();
+  await page.fill('#app-dialog [name="text"]', 'Also not saved');
+  await page.keyboard.press('Escape');
+  await page.locator('#app-dialog[open]').waitFor({ state: 'hidden' });
+  await first.hover();
+  await first.locator('.task-edit').click();
+  await page.fill('#app-dialog [name="text"]', '   ');
+  await page.click('#app-dialog-ok');
+  assert.ok(await page.locator('#app-dialog[open]').isVisible(), 'stays open when text is empty');
+  assert.strictEqual(await page.getAttribute('#app-dialog [name="text"]', 'aria-invalid'), 'true');
+  await page.keyboard.press('Escape');
+  assert.strictEqual((await first.locator('.task-text').textContent()).trim(), 'Review lesson plan for today');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('saving a built-in task unchanged keeps it translatable', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: () => localStorage.setItem('eduplanner_lang', 'fr')
+  });
+  const first = page.locator('#task-list .task-item').first();
+  await first.hover();
+  await first.locator('.task-edit').click();
+  assert.strictEqual(await page.inputValue('#app-dialog [name="text"]'), 'Revoir le plan de cours du jour');
+  await answerDialog(page, { tag: 'cours' });
+  await page.getByText('Tâche modifiée').waitFor();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_tasks')).teacher[0]);
+  assert.strictEqual(stored.text, 'Review lesson plan for today', 'still stored in English');
+  assert.strictEqual(stored.tag, 'cours');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('removes a subtask', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const first = page.locator('#task-list .task-item').first();
+  await first.locator('.add-subtask-btn').click();
+  await answerDialog(page, { value: 'Wrong subtask' });
+  await first.locator('.subtask-remove').click();
+  assert.strictEqual(await first.locator('.subtask-check').count(), 0);
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('emptying Recently deleted asks first', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const first = page.locator('#task-list .task-item').first();
+  await first.hover();
+  await first.locator('.task-delete').click();
+  await page.click('#trash-btn');
+  await page.locator('#trash-list .trash-item').first().waitFor();
+  await page.click('#trash-empty');
+  await answerDialog(page, {}, { cancel: true });
+  assert.strictEqual(await page.locator('#trash-list .trash-item').count(), 1, 'cancel keeps items');
+  await page.click('#trash-empty');
+  await answerDialog(page);
+  await page.waitForFunction(() => document.querySelectorAll('#trash-list .trash-item').length === 0);
+  assert.deepStrictEqual(errors, []);
   await context.close();
 });
 
@@ -186,8 +291,8 @@ test('archive drops entries older than 30 days and keeps at most 200', async (br
 
 test('backup includes roles and notes, and restores them on another device', async (browser, base) => {
   const { context, page, errors } = await openApp(browser, base);
-  page.once('dialog', (d) => d.accept('Exams Officer'));
   await page.click('#add-role-btn');
+  await answerDialog(page, { value: 'Exams Officer' });
   await page.fill('#new-task-input', 'Collate exam scripts');
   await page.press('#new-task-input', 'Enter');
   await page.evaluate(() => localStorage.setItem('eduplanner_notes', 'Remember chalk'));
@@ -204,8 +309,8 @@ test('backup includes roles and notes, and restores them on another device', asy
 
   // Fresh device: restore the file
   const other = await openApp(browser, base);
-  other.page.on('dialog', (d) => d.accept());
   await other.page.setInputFiles('#import-backup-input', { name: 'backup.json', mimeType: 'application/json', buffer: fileBuffer });
+  await answerDialog(other.page);
   await other.page.locator('.tab[data-role="exams_officer"]', { hasText: 'Exams Officer' }).click();
   await other.page.locator('#task-list .task-text', { hasText: 'Collate exam scripts' }).waitFor();
   assert.strictEqual(await other.page.inputValue('#scratchpad-textarea'), 'Remember chalk');
@@ -215,11 +320,11 @@ test('backup includes roles and notes, and restores them on another device', asy
 
 test('old-format backups still restore', async (browser, base) => {
   const { context, page, errors } = await openApp(browser, base);
-  page.on('dialog', (d) => d.accept());
   const oldBackup = { teacher: [{ id: 'a', text: 'Old backup task', freq: 'daily', done: false }] };
   await page.setInputFiles('#import-backup-input', {
     name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(oldBackup))
   });
+  await answerDialog(page);
   await page.locator('#task-list .task-text', { hasText: 'Old backup task' }).waitFor();
   assert.deepStrictEqual(errors, []);
   await context.close();
