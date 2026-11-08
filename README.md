@@ -55,7 +55,7 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 |---------|-------------|
 | **6 Dedicated Roles** | Teacher, Administrator, Head of Department, ICT Coordinator, Librarian, School Counselor |
 | **Pre-populated Tasks** | Each role ships with common daily, weekly, and monthly tasks — ready to use instantly |
-| **Custom Tasks** | Add your own tasks to any frequency category |
+| **Custom Tasks** | Add your own tasks to any frequency category, and edit any task's text, frequency, due date or tag |
 | **PDF Export** | Generate branded, printable task reports |
 | **Excel Export** | Download task data as `.xlsx` spreadsheets |
 | **Works Offline (PWA)** | Install on any phone or computer — full functionality without internet |
@@ -223,7 +223,7 @@ Monthly: activity reports, wellness workshops, career guidance
 1. **Select your role** from the tabs at the top
 2. **Switch frequency** — Daily, Weekly, Monthly, or All
 3. **Check off tasks** as you complete them
-4. **Add custom tasks** using the input field
+4. **Add custom tasks** using the input field, or tap the pencil on any task to edit it
 5. **Export** your task list as PDF or Excel when needed
 6. **Clear completed** tasks to keep your list clean. Deleted or cleared tasks can be restored from **Recently deleted** for 30 days
 

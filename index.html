@@ -295,6 +295,19 @@
     </div>
   </div>
 
+  <!-- In-app dialog (replaces the browser's prompt/confirm boxes) -->
+  <dialog id="app-dialog" class="app-dialog" aria-labelledby="app-dialog-title">
+    <form method="dialog" class="app-dialog-form" novalidate>
+      <h2 id="app-dialog-title" class="app-dialog-title"></h2>
+      <p id="app-dialog-message" class="app-dialog-message"></p>
+      <div id="app-dialog-fields" class="app-dialog-fields"></div>
+      <div class="app-dialog-actions">
+        <button type="button" id="app-dialog-cancel" class="btn btn-ghost btn-sm"></button>
+        <button type="submit" id="app-dialog-ok" class="btn btn-primary btn-sm"></button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="i18n.js"></script>
