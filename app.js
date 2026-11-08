@@ -391,6 +391,54 @@
 
   let archive = pruneArchive(readJSON('eduplanner_archive', []));
 
+  // ---------- Completion history ----------
+  // When a day, week or month ends, the state of that period's tasks is saved
+  // before the ticks are reset: { role, freq, period, date, d: [done], p: [pending] }
+  // `date` is the last day the app was opened in that period.
+  const HISTORY_KEY = 'eduplanner_history';
+  const HISTORY_MAX = 5000;
+  const HISTORY_DAYS = 400;
+
+  function sanitizeHistory(list) {
+    if (!Array.isArray(list)) return [];
+    const cutoff = localDateStr(new Date(Date.now() - HISTORY_DAYS * DAY_MS));
+    const texts = (arr) => (Array.isArray(arr) ? arr : [])
+      .filter(x => typeof x === 'string' && x.trim()).slice(0, 200).map(x => x.slice(0, 500));
+    return list
+      .filter(r => r && isSafeRoleKey(r.role) && FREQS.includes(r.freq) &&
+        typeof r.date === 'string' && DATE_RE.test(r.date) && r.date >= cutoff)
+      .map(r => ({ role: r.role, freq: r.freq, period: String(r.period || '').slice(0, 20), date: r.date, d: texts(r.d), p: texts(r.p) }))
+      .slice(-HISTORY_MAX);
+  }
+
+  let historyLog = null; // loaded at init (helpers it needs are defined further down)
+
+  function saveHistory() {
+    historyLog = sanitizeHistory(historyLog);
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(historyLog));
+    } catch (e) { /* storage full: the task list warning covers this */ }
+  }
+
+  // Snapshot the given frequencies for the period that just ended
+  function recordHistory(freqs, lastOpened) {
+    for (const role in tasks) {
+      for (const freq of freqs) {
+        const list = (tasks[role] || []).filter(t => t.freq === freq);
+        if (!list.length) continue;
+        const record = {
+          role, freq, period: lastOpened[freq], date: lastOpened.daily,
+          d: list.filter(t => t.done).map(t => t.text),
+          p: list.filter(t => !t.done).map(t => t.text)
+        };
+        // One record per role, frequency and period
+        const i = historyLog.findIndex(r => r.role === role && r.freq === freq && r.period === record.period);
+        if (i > -1) historyLog[i] = record; else historyLog.push(record);
+      }
+    }
+    saveHistory();
+  }
+
   function archiveTask(task, role) {
     archive.push({ ...task, role, deletedAt: new Date().toISOString() });
   }
@@ -430,7 +478,14 @@
     const currentWeekStr = getWeekYearString(now);
     const currentMonthStr = now.getFullYear() + '-' + now.getMonth();
 
-    const lastOpened = JSON.parse(localStorage.getItem('eduplanner_last_opened')) || {};
+    const lastOpened = readJSON('eduplanner_last_opened', {}) || {};
+
+    // Save what was done in any period that has ended, before resetting it
+    const current = { daily: todayStr, weekly: currentWeekStr, monthly: currentMonthStr };
+    const ended = FREQS.filter(f => lastOpened[f] && lastOpened[f] !== current[f]);
+    if (ended.length && typeof lastOpened.daily === 'string' && DATE_RE.test(lastOpened.daily)) {
+      recordHistory(ended, lastOpened);
+    }
 
     let needsSave = false;
 
@@ -463,12 +518,19 @@
     }
 
     // Update last opened stamps
-    localStorage.setItem('eduplanner_last_opened', JSON.stringify({
-      daily: todayStr,
-      weekly: currentWeekStr,
-      monthly: currentMonthStr
-    }));
+    try {
+      localStorage.setItem('eduplanner_last_opened', JSON.stringify(current));
+    } catch (e) { /* storage full or blocked */ }
   }
+
+  // If the app stays open past midnight (or a new week/month), reset and
+  // record history when it comes back into view, not only on reload
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    checkRecurringResets();
+    updateAnalytics();
+    renderTasks();
+  });
 
   function getWeekYearString(date) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -1322,6 +1384,7 @@
           }
         }
         const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
+        const backupHistory = isV2 && Array.isArray(raw.history) ? sanitizeHistory(raw.history) : null;
 
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
         const ok = await askConfirm({
@@ -1347,6 +1410,10 @@
           } catch (_) { /* saveTasks below reports storage problems */ }
           const notesBox = document.getElementById('scratchpad-textarea');
           if (notesBox && backupNotes !== null) notesBox.value = backupNotes;
+          if (backupHistory) {
+            historyLog = backupHistory;
+            saveHistory();
+          }
           saveTasks();
           updateAnalytics();
           renderTasks();
@@ -1825,7 +1892,8 @@
       exportedAt: new Date().toISOString(),
       tasks,
       customRoles,
-      notes
+      notes,
+      history: historyLog
     };
   }
 
@@ -2014,8 +2082,212 @@
     });
   }
 
+  // ---------- Term report ----------
+  const REPORT_INFO_KEY = 'eduplanner_report_info';
+
+  function allRoleKeys() {
+    const keys = [...BUILT_IN_ROLES];
+    Object.keys(tasks).concat(Object.keys(customRoles)).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+    return keys;
+  }
+
+  // Monday of the ISO week containing "YYYY-MM-DD"
+  function weekStart(isoDate) {
+    const d = new Date(isoDate + 'T00:00:00');
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return localDateStr(d);
+  }
+
+  // Gather the recorded history for one role and date range.
+  // Periods still in progress (today, this week, this month) are left out:
+  // counting them would mark tasks not yet due as missed.
+  function collectReport(role, from, to) {
+    const records = historyLog.filter(r => r.role === role && r.date >= from && r.date <= to);
+
+    const summary = {};
+    FREQS.forEach(f => { summary[f] = { periods: 0, done: 0, total: 0 }; });
+    const byTask = new Map(); // key freq|text -> { text, freq, done, total }
+    const byWeek = new Map(); // monday -> { days, done, total } (daily tasks)
+
+    records.forEach(r => {
+      const sm = summary[r.freq];
+      sm.periods++;
+      sm.done += r.d.length;
+      sm.total += r.d.length + r.p.length;
+      [[r.d, 1], [r.p, 0]].forEach(([list, isDone]) => list.forEach(text => {
+        const key = r.freq + '|' + text;
+        if (!byTask.has(key)) byTask.set(key, { text, freq: r.freq, done: 0, total: 0 });
+        const t = byTask.get(key);
+        t.total++;
+        t.done += isDone;
+      }));
+      if (r.freq === 'daily') {
+        const wk = weekStart(r.date);
+        if (!byWeek.has(wk)) byWeek.set(wk, { days: 0, done: 0, total: 0 });
+        const w = byWeek.get(wk);
+        w.days++;
+        w.done += r.d.length;
+        w.total += r.d.length + r.p.length;
+      }
+    });
+
+    const tasksList = [...byTask.values()].sort((a, b) =>
+      FREQS.indexOf(a.freq) - FREQS.indexOf(b.freq) || (a.done / a.total) - (b.done / b.total));
+    const weeks = [...byWeek.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return { count: records.length, summary, tasksList, weeks };
+  }
+
+  function pct(done, total) {
+    return total ? Math.round((done / total) * 100) : 0;
+  }
+
+  function reportHtml(info, data) {
+    const e = escHtml;
+    const longDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
+    const bar = (p) => `<div class="bar"><span style="width:${p}%"></span></div>`;
+    const summaryRows = FREQS.filter(f => data.summary[f].periods).map(f => {
+      const sm = data.summary[f];
+      const p = pct(sm.done, sm.total);
+      return `<tr><td>${e(tr(f))}</td><td>${sm.periods}</td><td>${e(tr('timesOf', { done: sm.done, total: sm.total }))}</td><td>${bar(p)}<b>${p}%</b></td></tr>`;
+    }).join('');
+    const taskRows = data.tasksList.map(t => {
+      const p = pct(t.done, t.total);
+      return `<tr><td>${e(taskText(t.text))}</td><td>${e(tr(t.freq))}</td><td>${e(tr('timesOf', { done: t.done, total: t.total }))}</td><td class="${p < 50 ? 'low' : ''}">${p}%</td></tr>`;
+    }).join('');
+    const weekRows = data.weeks.map(([wk, w]) => {
+      const p = pct(w.done, w.total);
+      return `<tr><td>${e(tr('weekOf', { date: formatDate(wk) }))}</td><td>${e(tr('daysRecorded', { n: w.days }))}</td><td>${bar(p)}<b>${p}%</b></td></tr>`;
+    }).join('');
+    const sig = (who) => `<div class="sig"><div class="sig-who">${e(who)}</div>
+      <div class="sig-line"><span>${e(tr('sigName'))}</span></div>
+      <div class="sig-line"><span>${e(tr('sigSignature'))}</span></div>
+      <div class="sig-line"><span>${e(tr('sigDate'))}</span></div></div>`;
+    const lang = (I18N.locales[currentLang] || I18N.locales.en).html;
+    const generated = new Date().toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
+
+    return `<!DOCTYPE html>
+<html lang="${lang}"><head><meta charset="utf-8"><title>EduPlanner - ${e(tr('reportTitle'))}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'General Sans', system-ui, sans-serif; padding: 36px; color: #1A2E1A; font-size: 12.5px; line-height: 1.45; }
+  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid #1B5E4B; margin-bottom: 18px; }
+  .brand { font-size: 20px; font-weight: 700; color: #1B5E4B; }
+  .brand-sub { font-size: 11px; color: #5C6B5C; }
+  h1 { font-size: 18px; margin-bottom: 2px; }
+  .meta { text-align: right; font-size: 12px; color: #3a4a3a; }
+  .meta div { margin-bottom: 2px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #1B5E4B; margin: 20px 0 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 6px 8px; background: #E6F2ED; color: #1B5E4B; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: 6px 8px; border-bottom: 1px solid #DDD9D1; vertical-align: middle; }
+  td.low { color: #A04020; font-weight: 600; }
+  .bar { display: inline-block; width: 90px; height: 8px; background: #E8E5DE; border-radius: 4px; margin-right: 8px; vertical-align: middle; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: #1B5E4B; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .note { font-size: 11px; color: #5C6B5C; margin-top: 8px; }
+  .comments { border: 1px solid #DDD9D1; border-radius: 6px; height: 90px; margin-top: 4px; }
+  .sigs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 8px; }
+  .sig-who { font-weight: 600; margin-bottom: 14px; }
+  .sig-line { border-bottom: 1px solid #1A2E1A; height: 30px; position: relative; margin-bottom: 6px; }
+  .sig-line span { position: absolute; bottom: -16px; left: 0; font-size: 10px; color: #5C6B5C; }
+  .sig-line + .sig-line { margin-top: 18px; }
+  section { break-inside: avoid; }
+  footer { margin-top: 36px; padding-top: 10px; border-top: 1px solid #DDD9D1; font-size: 10px; color: #9EA89E; text-align: center; }
+  @media print { body { padding: 16px; } }
+</style></head><body>
+  <header>
+    <div>
+      <div class="brand">EduPlanner</div>
+      <div class="brand-sub">${info.school ? e(info.school) : 'Harmony Digital Consults Ltd'}</div>
+    </div>
+    <div class="meta">
+      <h1>${e(tr('reportTitle'))}</h1>
+      ${info.staff ? `<div>${e(tr('reportStaff'))} <b>${e(info.staff)}</b></div>` : ''}
+      <div>${e(tr('roleLabel'))} <b>${e(roleLabel(info.role))}</b></div>
+      <div>${e(tr('reportPeriod'))} ${e(longDate(info.from))} – ${e(longDate(info.to))}</div>
+    </div>
+  </header>
+
+  <section>
+    <h2>${e(tr('reportSummary'))}</h2>
+    <table><thead><tr><th>${e(tr('colFrequency'))}</th><th>${e(tr('colPeriods'))}</th><th>${e(tr('colDone'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
+    <tbody>${summaryRows}</tbody></table>
+    <p class="note">${e(tr('reportNote'))}</p>
+  </section>
+
+  ${weekRows ? `<section>
+    <h2>${e(tr('reportByWeek'))}</h2>
+    <table><thead><tr><th>${e(tr('reportWeek'))}</th><th>${e(tr('reportDays'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
+    <tbody>${weekRows}</tbody></table>
+  </section>` : ''}
+
+  <section>
+    <h2>${e(tr('reportByTask'))}</h2>
+    <table><thead><tr><th>${e(tr('colTask'))}</th><th>${e(tr('colFrequency'))}</th><th>${e(tr('colDone'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
+    <tbody>${taskRows}</tbody></table>
+  </section>
+
+  <section>
+    <h2>${e(tr('reportComments'))}</h2>
+    <div class="comments"></div>
+  </section>
+
+  <section>
+    <h2>${e(tr('reportSignatures'))}</h2>
+    <div class="sigs">${sig(tr('sigStaff'))}${sig(tr('role.hod'))}${sig(tr('sigPrincipal'))}</div>
+  </section>
+
+  <footer>${e(tr('generated', { date: generated }))} · EduPlanner by Harmony Digital Consults Ltd</footer>
+  <script>window.onload = function () { window.print(); };<\/script>
+</body></html>`;
+  }
+
+  async function openTermReport() {
+    const saved = readJSON(REPORT_INFO_KEY, {}) || {};
+    const today = localDateStr(new Date());
+    const from = localDateStr(new Date(Date.now() - 91 * DAY_MS)); // about one term
+    const r = await openDialog({
+      title: tr('termReportTitle'),
+      message: tr('termReportHint'),
+      okLabel: tr('createReport'),
+      fields: [
+        { name: 'staff', label: tr('staffName'), value: typeof saved.staff === 'string' ? saved.staff : '', maxlength: 80 },
+        { name: 'school', label: tr('schoolName'), value: typeof saved.school === 'string' ? saved.school : '', maxlength: 100 },
+        { name: 'role', label: tr('roleLabel').replace(/\s*:\s*$/, ''), type: 'select', value: currentRole,
+          options: allRoleKeys().map(k => ({ value: k, label: roleLabel(k) })) },
+        { name: 'from', label: tr('fromDate'), type: 'date', value: from, required: true, row: 1 },
+        { name: 'to', label: tr('toDate'), type: 'date', value: today, required: true, row: 1 }
+      ]
+    });
+    if (!r) return;
+
+    const info = { staff: r.staff.trim(), school: r.school.trim(), role: r.role, from: r.from, to: r.to };
+    if (!DATE_RE.test(info.from) || !DATE_RE.test(info.to)) return;
+    if (info.from > info.to) [info.from, info.to] = [info.to, info.from];
+    try {
+      localStorage.setItem(REPORT_INFO_KEY, JSON.stringify({ staff: info.staff, school: info.school }));
+    } catch (e) { /* not important */ }
+
+    const data = collectReport(info.role, info.from, info.to);
+    if (!data.count) {
+      showToast(tr('reportEmpty'));
+      return;
+    }
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) {
+      showToast(tr('popupBlocked'));
+      return;
+    }
+    win.document.write(reportHtml(info, data));
+    win.document.close();
+    if (window.Analytics) window.Analytics.track('export_data', { export_type: 'term_report', role: info.role });
+  }
+
+  const reportBtn = document.getElementById('term-report-btn');
+  if (reportBtn) reportBtn.addEventListener('click', () => openTermReport());
+
   // ---------- Init ----------
   loadTasks();
+  historyLog = sanitizeHistory(readJSON(HISTORY_KEY, []));
   checkRecurringResets();
   saveArchive(); // writes back the pruned archive
   updateAnalytics();

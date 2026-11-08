@@ -36,9 +36,9 @@ const test = (name, fn) => tests.push({ name, fn });
 
 // Opens the app in a fresh context. External hosts (CDNs, analytics) are
 // blocked so the tests are fast and deterministic.
-async function openApp(browser, base, { query = '', initScript, serviceWorkers = 'block' } = {}) {
+async function openApp(browser, base, { query = '', initScript, serviceWorkers = 'block' } = {}, initArg) {
   const context = await browser.newContext({ serviceWorkers });
-  if (initScript) await context.addInitScript(initScript, DAY_MS);
+  if (initScript) await context.addInitScript(initScript, initArg === undefined ? DAY_MS : [DAY_MS, initArg]);
   const external = []; // URLs of blocked external requests, newest last
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => {
     external.push(route.request().url());
@@ -455,6 +455,112 @@ test('French browsers start in French; search finds translated tasks', async (br
   assert.strictEqual(await page.locator('#task-list .task-item').count(), 1);
   assert.deepStrictEqual(errors, []);
   await context.close();
+});
+
+// ---------- History & term report ----------
+// Local "YYYY-MM-DD" n days ago (in the browser)
+const isoDaysAgo = (n) => {
+  const d = new Date(Date.now() - n * 86400000);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+test('records the finished day in history before resetting it', async (browser, base) => {
+  const yesterday = isoDaysAgo(1);
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, yesterday]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_tasks', JSON.stringify({ teacher: [
+        { id: '1', text: 'Take class attendance', freq: 'daily', done: true },
+        { id: '2', text: 'Mark and return assignments', freq: 'daily', done: false },
+        { id: '3', text: 'Attend staff meeting', freq: 'weekly', done: true }
+      ] }));
+      localStorage.setItem('eduplanner_last_opened', JSON.stringify({ daily: yesterday, weekly: 'old-week', monthly: 'old-month' }));
+    }
+  }, yesterday);
+  const history = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_history')));
+  const daily = history.find(r => r.freq === 'daily');
+  assert.strictEqual(daily.date, yesterday);
+  assert.deepStrictEqual(daily.d, ['Take class attendance']);
+  assert.deepStrictEqual(daily.p, ['Mark and return assignments']);
+  const weekly = history.find(r => r.freq === 'weekly');
+  assert.deepStrictEqual(weekly.d, ['Attend staff meeting'], 'ended week recorded too');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_tasks')).teacher);
+  assert.strictEqual(stored[0].done, false, 'daily task reset');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('term report: summary, per-task rates, weeks and signature lines', async (browser, base) => {
+  const days = [3, 4, 5, 10, 11].map(isoDaysAgo);
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, days]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_tasks', JSON.stringify({ teacher: [
+        { id: '1', text: 'Take class attendance', freq: 'daily', done: false },
+        { id: '2', text: 'Mark and return assignments', freq: 'daily', done: false }
+      ] }));
+      localStorage.setItem('eduplanner_history', JSON.stringify(days.map((date, i) => ({
+        role: 'teacher', freq: 'daily', period: date, date,
+        d: i < 4 ? ['Take class attendance'] : [],
+        p: i < 4 ? ['Mark and return assignments'] : ['Take class attendance', 'Mark and return assignments']
+      }))));
+    }
+  }, days);
+  await page.click('#term-report-btn');
+  const popupPromise = context.waitForEvent('page');
+  await answerDialog(page, { staff: 'Ada Obi', school: 'Unity Secondary School', from: isoDaysAgo(30), to: isoDaysAgo(0) });
+  const report = await popupPromise;
+  await report.waitForLoadState('domcontentloaded');
+  const text = await report.textContent('body');
+  assert.ok(text.includes('Ada Obi') && text.includes('Unity Secondary School'), 'staff and school shown');
+  // 5 recorded days; today is still in progress, so it isn't counted
+  assert.ok(text.includes('4 of 5'), 'per-task rate: ' + text.slice(0, 2000));
+  assert.ok(text.includes('0 of 5'), 'never-done task listed');
+  assert.ok(await report.locator('.sig').count() === 3, 'three signature blocks');
+  assert.ok(text.includes('Week of'), 'week-by-week section');
+  assert.deepStrictEqual(errors, []);
+  // Name and school are remembered for next time
+  await page.click('#term-report-btn');
+  assert.strictEqual(await page.inputValue('#app-dialog [name="school"]'), 'Unity Secondary School');
+  await answerDialog(page, {}, { cancel: true });
+  await context.close();
+});
+
+test('term report with no history shows a message, not an empty report', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.click('#term-report-btn');
+  await answerDialog(page, { role: 'teacher', from: isoDaysAgo(300), to: isoDaysAgo(200) });
+  await page.getByText('No history yet').waitFor();
+  assert.strictEqual(context.pages().length, 1, 'no report window opened');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('history is included in backups and restored', async (browser, base) => {
+  const day = isoDaysAgo(2);
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: ([, day]) => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('eduplanner_history', JSON.stringify([{ role: 'teacher', freq: 'daily', period: day, date: day, d: ['Take class attendance'], p: [] }]));
+    }
+  }, day);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#export-backup')]);
+  const buffer = fs.readFileSync(await download.path());
+  assert.strictEqual(JSON.parse(buffer.toString('utf8')).history.length, 1);
+  await context.close();
+
+  const other = await openApp(browser, base);
+  await other.page.setInputFiles('#import-backup-input', { name: 'b.json', mimeType: 'application/json', buffer });
+  await answerDialog(other.page);
+  await other.page.getByText('Backup restored').waitFor();
+  const restored = await other.page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_history')));
+  assert.strictEqual(restored[0].date, day);
+  assert.deepStrictEqual(errors, []);
+  assert.deepStrictEqual(other.errors, []);
+  await other.context.close();
 });
 
 // ---------- Analytics consent (opt-in) ----------
