@@ -536,6 +536,44 @@ test('records the finished day in history before resetting it', async (browser, 
   await context.close();
 });
 
+test('first visit on a device keeps existing ticks', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base, {
+    initScript: () => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      // Tasks but no "last opened" stamps, e.g. storage copied from elsewhere
+      localStorage.setItem('eduplanner_tasks', JSON.stringify({ teacher: [{ id: '1', text: 'Take class attendance', freq: 'daily', done: true }] }));
+    }
+  });
+  assert.ok(await page.locator('#task-list .task-checkbox').first().isChecked(), 'tick kept');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
+test('restoring an old backup resets stale ticks and records them in history', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  const lastWeek = isoDaysAgo(8);
+  const backup = {
+    app: 'EduPlanner', version: 2,
+    tasks: { teacher: [
+      { id: '1', text: 'Take class attendance', freq: 'daily', done: true },
+      { id: '2', text: 'Attend staff meeting', freq: 'weekly', done: true }
+    ] },
+    lastOpened: { daily: lastWeek, weekly: 'old-week', monthly: 'old-month' }
+  };
+  await page.setInputFiles('#import-backup-input', { name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+  await answerDialog(page);
+  await page.getByText('Backup restored').waitFor();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_tasks')).teacher);
+  assert.ok(stored.every(t => !t.done), 'stale ticks reset');
+  const history = await page.evaluate(() => JSON.parse(localStorage.getItem('eduplanner_history')));
+  const daily = history.find(r => r.freq === 'daily');
+  assert.strictEqual(daily.date, lastWeek);
+  assert.deepStrictEqual(daily.d, ['Take class attendance'], 'the old day is kept in history');
+  assert.deepStrictEqual(errors, []);
+  await context.close();
+});
+
 test('term report: summary, per-task rates, weeks and signature lines', async (browser, base) => {
   const days = [3, 4, 5, 10, 11].map(isoDaysAgo);
   const { context, page, errors } = await openApp(browser, base, {
