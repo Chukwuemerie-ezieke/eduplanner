@@ -2,6 +2,12 @@
 
 All notable changes to EduPlanner. The version shown in the app footer matches the newest entry here.
 
+## 2.0.1 (November 2026)
+
+### Fixed
+- The first time the app opened on a device (for example after restoring a backup on a new phone), ticked tasks were cleared. Existing ticks are now kept.
+- Backups now record when their ticks were current. Restoring an older backup resets any day, week or month that has since ended, and saves it to history, instead of showing old ticks as today's.
+
 ## 2.0.0 (November 2026)
 
 ### New

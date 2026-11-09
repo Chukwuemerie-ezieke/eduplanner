@@ -7,7 +7,7 @@
    Bump both on every release so installed copies drop their old cache.
    ======================================== */
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const CACHE_NAME = 'eduplanner-' + APP_VERSION;
 const ASSETS = [
   './',

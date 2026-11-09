@@ -8,7 +8,7 @@
   'use strict';
 
   // Release version: keep in sync with APP_VERSION in sw.js and CHANGELOG.md
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.0.1';
 
   // ---------- Language (translations live in i18n.js) ----------
   const I18N = window.EDU_I18N || {
@@ -257,9 +257,12 @@
     }
 
     let needsSave = false;
+    // First visit on this device (or after storage was cleared): there's no
+    // earlier visit to compare with, so keep existing ticks as they are
+    const firstVisit = !lastOpened.daily;
 
     for (const r in tasks) {
-      if (tasks[r]) {
+      if (tasks[r] && !firstVisit) {
         tasks[r].forEach(t => {
           if (t.done) {
             if (t.freq === 'daily' && lastOpened.daily !== todayStr) {
@@ -1156,6 +1159,11 @@
         const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
         const backupHistory = isV2 && Array.isArray(raw.history) ? sanitizeHistory(raw.history) : null;
         const backupTerms = isV2 && Array.isArray(raw.terms) ? sanitizeTerms(raw.terms) : null;
+        const lo = isV2 ? raw.lastOpened : null;
+        const backupLastOpened = lo && typeof lo === 'object' && typeof lo.daily === 'string' && DATE_RE.test(lo.daily) &&
+          typeof lo.weekly === 'string' && typeof lo.monthly === 'string'
+          ? { daily: lo.daily, weekly: lo.weekly.slice(0, 20), monthly: lo.monthly.slice(0, 20) }
+          : null;
 
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
         const ok = await askConfirm({
@@ -1187,6 +1195,12 @@
           }
           if (backupTerms) saveTerms(backupTerms);
           saveTasks();
+          // Ticks in the backup belong to the day/week/month it was made:
+          // reset (and record history for) any period that has since ended
+          if (backupLastOpened) {
+            try { localStorage.setItem('eduplanner_last_opened', JSON.stringify(backupLastOpened)); } catch (_) { /* ignore */ }
+            checkRecurringResets();
+          }
           updateAnalytics();
           renderTasks();
           hideDataNotice();
@@ -1670,7 +1684,9 @@
       customRoles,
       notes,
       history: historyLog,
-      terms: schoolTerms
+      terms: schoolTerms,
+      // When the ticks were last current, so a restore can reset them correctly
+      lastOpened: readJSON('eduplanner_last_opened', null)
     };
   }
 
