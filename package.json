@@ -4,7 +4,8 @@
   "description": "Role-based task planner for educators (static site, no build step)",
   "license": "MIT",
   "scripts": {
-    "test": "node tests/smoke.test.js"
+    "test": "node tests/smoke.test.js",
+    "screenshots": "node tests/screenshots.js"
   },
   "devDependencies": {
     "playwright": "1.63.0"

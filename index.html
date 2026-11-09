@@ -277,19 +277,22 @@
         <span data-i18n="dataLocal">Data stays on your device</span>
         <span class="footer-sep" data-analytics-only hidden>&middot;</span>
         <button type="button" id="analytics-toggle" class="footer-link-btn" data-analytics-only hidden>Usage stats: Off</button>
+        <span class="footer-sep">&middot;</span>
+        <a id="app-version" class="footer-version" href="https://github.com/Chukwuemerie-ezieke/eduplanner/blob/master/CHANGELOG.md" target="_blank" rel="noopener"></a>
       </div>
     </div>
   </footer>
 
 
   <!-- Quick Notes / Scratchpad -->
-  <div id="scratchpad-container" class="scratchpad-closed" style="position: fixed; bottom: 20px; left: 20px; z-index: 999; background: var(--color-surface); border: 1px solid var(--color-primary); border-radius: 8px; box-shadow: var(--shadow-lg); overflow: hidden; transition: all 0.3s ease;">
-    <div id="scratchpad-header" style="background: var(--color-primary); color: white; padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold;">
-      <span data-i18n="quickNotes">📝 Quick Notes</span>
-      <svg id="scratchpad-toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
-    </div>
-    <div id="scratchpad-body" style="padding: 10px; display: none;">
-      <textarea id="scratchpad-textarea" placeholder="Jot down quick thoughts here..." data-i18n-placeholder="notesPlaceholder" aria-label="Quick notes" data-i18n-aria-label="quickNotesLabel" style="width: 250px; height: 150px; border: 1px solid var(--color-border); border-radius: 4px; padding: 8px; font-family: inherit; font-size: 13px; resize: none; background: var(--color-bg); color: var(--color-text);"></textarea>
+  <div id="scratchpad-container" class="scratchpad">
+    <button type="button" id="scratchpad-header" class="scratchpad-toggle" aria-expanded="false" aria-controls="scratchpad-body" aria-label="Quick notes" data-i18n-aria-label="quickNotesLabel">
+      <span class="scratchpad-emoji" aria-hidden="true">📝</span>
+      <span class="scratchpad-label" data-i18n="quickNotes">Quick Notes</span>
+      <svg id="scratchpad-toggle-icon" class="scratchpad-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
+    </button>
+    <div id="scratchpad-body" class="scratchpad-body" hidden>
+      <textarea id="scratchpad-textarea" class="scratchpad-textarea" placeholder="Jot down quick thoughts here..." data-i18n-placeholder="notesPlaceholder" aria-label="Quick notes" data-i18n-aria-label="quickNotesLabel"></textarea>
     </div>
   </div>
 
@@ -319,6 +322,9 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="i18n.js"></script>
+  <script src="default-tasks.js"></script>
+  <script src="dialog.js"></script>
+  <script src="report.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

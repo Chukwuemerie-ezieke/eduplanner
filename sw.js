@@ -3,16 +3,20 @@
    Network-first for app files (so updates reach users),
    cache fallback for offline use.
 
-   Bump CACHE_VERSION on every release to clear old caches.
+   APP_VERSION must match APP_VERSION in app.js (a test checks this).
+   Bump both on every release so installed copies drop their old cache.
    ======================================== */
 
-const CACHE_VERSION = 'v8';
-const CACHE_NAME = 'eduplanner-' + CACHE_VERSION;
+const APP_VERSION = '2.0.0';
+const CACHE_NAME = 'eduplanner-' + APP_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './i18n.js',
+  './default-tasks.js',
+  './dialog.js',
+  './report.js',
   './app.js',
   './config.js',
   './analytics.js',

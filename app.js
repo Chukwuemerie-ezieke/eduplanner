@@ -7,6 +7,9 @@
 (function () {
   'use strict';
 
+  // Release version: keep in sync with APP_VERSION in sw.js and CHANGELOG.md
+  const APP_VERSION = '2.0.0';
+
   // ---------- Language (translations live in i18n.js) ----------
   const I18N = window.EDU_I18N || {
     ui: { en: {} }, tasks: {}, locales: { en: { date: 'en-GB', html: 'en' } }, languages: ['en']
@@ -58,298 +61,11 @@
     return d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
-  // ---------- In-app dialog (replaces the browser's prompt/confirm) ----------
-  // openDialog({ title, message, fields, okLabel, cancel, danger })
-  //   fields: [{ name, label, type: 'text'|'date'|'select', value, options, placeholder,
-  //              required, readonly, maxlength, row }]  (row: fields sharing a row number sit side by side)
-  // Resolves to { name: value, ... } on OK, or null on cancel / Escape / backdrop click.
-  function openDialog({ title, message = '', fields = [], okLabel, cancel = true, danger = false }) {
-    const dlg = document.getElementById('app-dialog');
+  // ---------- In-app dialog (dialog.js) ----------
+  const { openDialog, askText, askConfirm } = window.EduDialog.create(tr);
 
-    // Very old browsers without <dialog>: fall back to the native boxes
-    if (!dlg || typeof dlg.showModal !== 'function') {
-      if (!fields.length) return Promise.resolve(confirm([title, message].filter(Boolean).join('\n\n')) ? {} : null);
-      const values = {};
-      for (const f of fields) {
-        if (f.type === 'select' || f.type === 'date') { values[f.name] = f.value || ''; continue; }
-        const v = prompt(f.label, f.value || '');
-        if (v === null) return Promise.resolve(null);
-        values[f.name] = v;
-      }
-      return Promise.resolve(values);
-    }
-
-    $('#app-dialog-title').textContent = title;
-    $('#app-dialog-message').textContent = message;
-    const fieldsBox = $('#app-dialog-fields');
-    fieldsBox.innerHTML = '';
-    const inputs = {};
-    const rows = {};
-
-    fields.forEach(f => {
-      if (f.type === 'heading') {
-        const h = document.createElement('h3');
-        h.className = 'app-dialog-heading';
-        h.textContent = f.label;
-        fieldsBox.appendChild(h);
-        return;
-      }
-      const label = document.createElement('label');
-      label.className = 'app-dialog-field';
-      const caption = document.createElement('span');
-      caption.textContent = f.label;
-      let input;
-      if (f.type === 'select') {
-        input = document.createElement('select');
-        (f.options || []).forEach(o => {
-          const opt = document.createElement('option');
-          opt.value = o.value;
-          opt.textContent = o.label;
-          input.appendChild(opt);
-        });
-      } else {
-        input = document.createElement('input');
-        input.type = f.type || 'text';
-        if (f.placeholder) input.placeholder = f.placeholder;
-        if (f.maxlength) input.maxLength = f.maxlength;
-        if (f.readonly) {
-          input.readOnly = true;
-          input.addEventListener('focus', () => input.select());
-        }
-        input.autocomplete = 'off';
-      }
-      input.name = f.name;
-      input.value = f.value || '';
-      if (f.required) input.setAttribute('aria-required', 'true');
-      inputs[f.name] = input;
-      label.append(caption, input);
-
-      if (f.row) {
-        if (!rows[f.row]) {
-          rows[f.row] = document.createElement('div');
-          rows[f.row].className = 'app-dialog-row';
-          fieldsBox.appendChild(rows[f.row]);
-        }
-        rows[f.row].appendChild(label);
-      } else {
-        fieldsBox.appendChild(label);
-      }
-    });
-
-    const okBtn = $('#app-dialog-ok');
-    const cancelBtn = $('#app-dialog-cancel');
-    okBtn.textContent = okLabel || tr('ok');
-    okBtn.classList.toggle('btn-danger', danger);
-    cancelBtn.textContent = tr('cancel');
-    cancelBtn.hidden = !cancel;
-
-    return new Promise(resolve => {
-      const ac = new AbortController();
-      const opts = { signal: ac.signal };
-      // Resolve right away (not on the later 'close' event) so the caller's
-      // follow-up runs before the user can do anything else
-      const finish = (result) => {
-        ac.abort();
-        if (dlg.open) dlg.close();
-        resolve(result);
-      };
-
-      dlg.querySelector('form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        for (const f of fields) {
-          const input = inputs[f.name];
-          if (!input) continue;
-          if (f.required && !input.value.trim()) {
-            input.setAttribute('aria-invalid', 'true');
-            input.focus();
-            return;
-          }
-          input.removeAttribute('aria-invalid');
-        }
-        const values = {};
-        for (const name in inputs) values[name] = inputs[name].value;
-        finish(values);
-      }, opts);
-      cancelBtn.addEventListener('click', () => finish(null), opts);
-      // Click on the dimmed backdrop (outside the box) cancels
-      dlg.addEventListener('click', (e) => { if (e.target === dlg) finish(null); }, opts);
-      // Escape key
-      dlg.addEventListener('close', () => finish(null), opts);
-
-      dlg.showModal();
-      // Focus the first field; for destructive confirmations focus Cancel
-      const firstField = fields.find(f => inputs[f.name]);
-      const first = firstField ? inputs[firstField.name] : (danger && cancel ? cancelBtn : okBtn);
-      first.focus();
-      if (firstField && first.select && !firstField.readonly && first.type === 'text') first.select();
-    });
-  }
-
-  async function askText(opts) {
-    const r = await openDialog({ ...opts, fields: [{ name: 'value', required: true, maxlength: 200, ...opts.field }] });
-    return r ? r.value.trim() : null;
-  }
-
-  async function askConfirm(opts) {
-    return (await openDialog(opts)) !== null;
-  }
-
-  // ---------- Pre-populated tasks by role and frequency ----------
-  const DEFAULT_TASKS = {
-    teacher: {
-      daily: [
-        'Review lesson plan for today',
-        'Take class attendance',
-        'Update student progress notes',
-        'Mark and return assignments',
-        'Prepare materials for tomorrow\'s lessons',
-        'Supervise student behavior during break',
-        'Communicate updates to parents (if needed)'
-      ],
-      weekly: [
-        'Submit weekly lesson notes to HOD',
-        'Prepare and grade quizzes/tests',
-        'Review scheme of work progress',
-        'Attend staff meeting',
-        'Update class register and records',
-        'Plan differentiated activities for struggling students',
-        'Organize classroom and resources'
-      ],
-      monthly: [
-        'Submit monthly progress report',
-        'Review and adjust lesson plans for next month',
-        'Conduct parent-teacher communication',
-        'Participate in professional development session',
-        'Analyze student performance data',
-        'Update cumulative records'
-      ]
-    },
-    administrator: {
-      daily: [
-        'Review and respond to correspondence',
-        'Monitor staff attendance and punctuality',
-        'Handle student disciplinary issues',
-        'Coordinate daily school operations',
-        'Review financial transactions and petty cash',
-        'Update school calendar if needed'
-      ],
-      weekly: [
-        'Hold management team briefing',
-        'Review budget expenditure report',
-        'Monitor cleanliness and facility maintenance',
-        'Review admission and enrollment status',
-        'Coordinate extracurricular activities schedule',
-        'Approve purchase orders and requisitions'
-      ],
-      monthly: [
-        'Prepare monthly financial summary',
-        'Conduct staff performance review meeting',
-        'Submit regulatory compliance documents',
-        'Organize school assembly or special event',
-        'Review and update school policies',
-        'Generate enrollment and attendance reports'
-      ]
-    },
-    hod: {
-      daily: [
-        'Monitor teaching quality in department',
-        'Review lesson delivery and classroom visits',
-        'Address departmental issues promptly',
-        'Ensure teaching aids are available'
-      ],
-      weekly: [
-        'Hold departmental meeting',
-        'Review and sign off on lesson notes',
-        'Coordinate inter-class assessments',
-        'Mentor and support new teachers',
-        'Verify scheme of work compliance',
-        'Plan department resource needs'
-      ],
-      monthly: [
-        'Submit departmental performance report',
-        'Analyze subject-wide student results',
-        'Organize department training session',
-        'Review and update department curriculum',
-        'Evaluate resource utilization',
-        'Set targets for the next month'
-      ]
-    },
-    ict: {
-      daily: [
-        'Check all computer systems and devices',
-        'Resolve IT support tickets',
-        'Monitor internet connectivity',
-        'Ensure projectors and displays are working',
-        'Back up critical school data'
-      ],
-      weekly: [
-        'Run system and software updates',
-        'Conduct ICT training/support for staff',
-        'Audit device inventory',
-        'Test backup and recovery procedures',
-        'Review network security logs',
-        'Update school website or portal'
-      ],
-      monthly: [
-        'Submit IT infrastructure status report',
-        'Plan and procure technology supplies',
-        'Conduct cybersecurity awareness session',
-        'Review and update IT policies',
-        'Evaluate software license renewals',
-        'Prepare ICT integration plan for curriculum'
-      ]
-    },
-    librarian: {
-      daily: [
-        'Open and organize library for the day',
-        'Process book checkouts and returns',
-        'Assist students with research and reading',
-        'Shelve returned books properly',
-        'Monitor library behavior and rules'
-      ],
-      weekly: [
-        'Update library catalog and records',
-        'Conduct reading promotion activity',
-        'Check for overdue books and send reminders',
-        'Organize reading corner and displays',
-        'Coordinate with teachers on reference materials',
-        'Inventory new book arrivals'
-      ],
-      monthly: [
-        'Submit library usage statistics report',
-        'Recommend new book purchases',
-        'Organize book club or reading challenge',
-        'Conduct library orientation for new students',
-        'Review and repair damaged materials',
-        'Plan library events and theme months'
-      ]
-    },
-    counselor: {
-      daily: [
-        'Review student referral cases',
-        'Conduct individual counseling sessions',
-        'Follow up on at-risk students',
-        'Document session notes and progress',
-        'Coordinate with class teachers on concerns'
-      ],
-      weekly: [
-        'Facilitate group counseling session',
-        'Meet with parents of referred students',
-        'Conduct classroom guidance lesson',
-        'Review and update student case files',
-        'Coordinate with external support agencies',
-        'Attend student welfare meeting'
-      ],
-      monthly: [
-        'Submit counseling activity report',
-        'Organize wellness or life skills workshop',
-        'Analyze referral patterns and trends',
-        'Update counseling resources and materials',
-        'Conduct peer mediation training',
-        'Plan career guidance or orientation session'
-      ]
-    }
-  };
+  // ---------- Pre-populated tasks by role and frequency (default-tasks.js) ----------
+  const DEFAULT_TASKS = window.EDU_DEFAULT_TASKS || {};
 
   const ROLE_LABELS = {
     teacher: 'Teacher',
@@ -1517,7 +1233,7 @@
 
   const langSelect = $('#lang-select');
   if (langSelect) {
-    if (window.Analytics) { window.Analytics.track('app_open', { app_version: '1.0.0' }); window.Analytics.page('Home'); }
+    if (window.Analytics) { window.Analytics.track('app_open', { app_version: APP_VERSION }); window.Analytics.page('Home'); }
 
     langSelect.addEventListener('change', (e) => {
       const lang = e.target.value;
@@ -1588,11 +1304,14 @@
 
     // Toggle open/close
     scratchpadHeader.addEventListener('click', () => {
-      const isOpen = scratchpadBody.style.display === 'block';
-      scratchpadBody.style.display = isOpen ? 'none' : 'block';
+      const isOpen = !scratchpadBody.hidden;
+      scratchpadBody.hidden = isOpen;
+      scratchpadHeader.setAttribute('aria-expanded', String(!isOpen));
+      document.getElementById('scratchpad-container').classList.toggle('open', !isOpen);
       scratchpadIcon.innerHTML = isOpen
         ? '<polyline points="18 15 12 9 6 15"></polyline>'
         : '<polyline points="6 9 12 15 18 9"></polyline>';
+      if (!isOpen) scratchpadTextarea.focus();
     });
 
     // Auto-save on type
@@ -2274,110 +1993,6 @@
     return { count: records.length, summary, tasksList, weeks };
   }
 
-  function pct(done, total) {
-    return total ? Math.round((done / total) * 100) : 0;
-  }
-
-  function reportHtml(info, data) {
-    const e = escHtml;
-    const longDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
-    const bar = (p) => `<div class="bar"><span style="width:${p}%"></span></div>`;
-    const summaryRows = FREQS.filter(f => data.summary[f].periods).map(f => {
-      const sm = data.summary[f];
-      const p = pct(sm.done, sm.total);
-      return `<tr><td>${e(tr(f))}</td><td>${sm.periods}</td><td>${e(tr('timesOf', { done: sm.done, total: sm.total }))}</td><td>${bar(p)}<b>${p}%</b></td></tr>`;
-    }).join('');
-    const taskRows = data.tasksList.map(t => {
-      const p = pct(t.done, t.total);
-      return `<tr><td>${e(taskText(t.text))}</td><td>${e(tr(t.freq))}</td><td>${e(tr('timesOf', { done: t.done, total: t.total }))}</td><td class="${p < 50 ? 'low' : ''}">${p}%</td></tr>`;
-    }).join('');
-    const weekRows = data.weeks.map(([wk, w]) => {
-      const p = pct(w.done, w.total);
-      return `<tr><td>${e(tr('weekOf', { date: formatDate(wk) }))}</td><td>${e(tr('daysRecorded', { n: w.days }))}</td><td>${bar(p)}<b>${p}%</b></td></tr>`;
-    }).join('');
-    const sig = (who) => `<div class="sig"><div class="sig-who">${e(who)}</div>
-      <div class="sig-line"><span>${e(tr('sigName'))}</span></div>
-      <div class="sig-line"><span>${e(tr('sigSignature'))}</span></div>
-      <div class="sig-line"><span>${e(tr('sigDate'))}</span></div></div>`;
-    const lang = (I18N.locales[currentLang] || I18N.locales.en).html;
-    const generated = new Date().toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
-
-    return `<!DOCTYPE html>
-<html lang="${lang}"><head><meta charset="utf-8"><title>EduPlanner - ${e(tr('reportTitle'))}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'General Sans', system-ui, sans-serif; padding: 36px; color: #1A2E1A; font-size: 12.5px; line-height: 1.45; }
-  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid #1B5E4B; margin-bottom: 18px; }
-  .brand { font-size: 20px; font-weight: 700; color: #1B5E4B; }
-  .brand-sub { font-size: 11px; color: #5C6B5C; }
-  h1 { font-size: 18px; margin-bottom: 2px; }
-  .meta { text-align: right; font-size: 12px; color: #3a4a3a; }
-  .meta div { margin-bottom: 2px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #1B5E4B; margin: 20px 0 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; padding: 6px 8px; background: #E6F2ED; color: #1B5E4B; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
-  td { padding: 6px 8px; border-bottom: 1px solid #DDD9D1; vertical-align: middle; }
-  td.low { color: #A04020; font-weight: 600; }
-  .bar { display: inline-block; width: 90px; height: 8px; background: #E8E5DE; border-radius: 4px; margin-right: 8px; vertical-align: middle; overflow: hidden; }
-  .bar span { display: block; height: 100%; background: #1B5E4B; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .note { font-size: 11px; color: #5C6B5C; margin-top: 8px; }
-  .comments { border: 1px solid #DDD9D1; border-radius: 6px; height: 90px; margin-top: 4px; }
-  .sigs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 8px; }
-  .sig-who { font-weight: 600; margin-bottom: 14px; }
-  .sig-line { border-bottom: 1px solid #1A2E1A; height: 30px; position: relative; margin-bottom: 6px; }
-  .sig-line span { position: absolute; bottom: -16px; left: 0; font-size: 10px; color: #5C6B5C; }
-  .sig-line + .sig-line { margin-top: 18px; }
-  section { break-inside: avoid; }
-  footer { margin-top: 36px; padding-top: 10px; border-top: 1px solid #DDD9D1; font-size: 10px; color: #9EA89E; text-align: center; }
-  @media print { body { padding: 16px; } }
-</style></head><body>
-  <header>
-    <div>
-      <div class="brand">EduPlanner</div>
-      <div class="brand-sub">${info.school ? e(info.school) : 'Harmony Digital Consults Ltd'}</div>
-    </div>
-    <div class="meta">
-      <h1>${e(tr('reportTitle'))}${info.termName ? ' · ' + e(info.termName) : ''}</h1>
-      ${info.staff ? `<div>${e(tr('reportStaff'))} <b>${e(info.staff)}</b></div>` : ''}
-      <div>${e(tr('roleLabel'))} <b>${e(roleLabel(info.role))}</b></div>
-      <div>${e(tr('reportPeriod'))} ${e(longDate(info.from))} – ${e(longDate(info.to))}</div>
-    </div>
-  </header>
-
-  <section>
-    <h2>${e(tr('reportSummary'))}</h2>
-    <table><thead><tr><th>${e(tr('colFrequency'))}</th><th>${e(tr('colPeriods'))}</th><th>${e(tr('colDone'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
-    <tbody>${summaryRows}</tbody></table>
-    <p class="note">${e(tr('reportNote'))}</p>
-  </section>
-
-  ${weekRows ? `<section>
-    <h2>${e(tr('reportByWeek'))}</h2>
-    <table><thead><tr><th>${e(tr('reportWeek'))}</th><th>${e(tr('reportDays'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
-    <tbody>${weekRows}</tbody></table>
-  </section>` : ''}
-
-  <section>
-    <h2>${e(tr('reportByTask'))}</h2>
-    <table><thead><tr><th>${e(tr('colTask'))}</th><th>${e(tr('colFrequency'))}</th><th>${e(tr('colDone'))}</th><th>${e(tr('colRate'))}</th></tr></thead>
-    <tbody>${taskRows}</tbody></table>
-  </section>
-
-  <section>
-    <h2>${e(tr('reportComments'))}</h2>
-    <div class="comments"></div>
-  </section>
-
-  <section>
-    <h2>${e(tr('reportSignatures'))}</h2>
-    <div class="sigs">${sig(tr('sigStaff'))}${sig(tr('role.hod'))}${sig(tr('sigPrincipal'))}</div>
-  </section>
-
-  <footer>${e(tr('generated', { date: generated }))} · EduPlanner by Harmony Digital Consults Ltd</footer>
-  <script>window.onload = function () { window.print(); };<\/script>
-</body></html>`;
-  }
-
   async function openTermReport() {
     const saved = readJSON(REPORT_INFO_KEY, {}) || {};
     const today = localDateStr(new Date());
@@ -2424,7 +2039,10 @@
       showToast(tr('popupBlocked'));
       return;
     }
-    win.document.write(reportHtml(info, data));
+    win.document.write(window.EduReport.html(info, data, {
+      tr, escHtml, taskText, formatDate, roleLabel, dateLocale, FREQS,
+      htmlLang: (I18N.locales[currentLang] || I18N.locales.en).html
+    }));
     win.document.close();
     if (window.Analytics) window.Analytics.track('export_data', { export_type: 'term_report', role: info.role });
   }
@@ -2433,6 +2051,8 @@
   if (reportBtn) reportBtn.addEventListener('click', () => openTermReport());
 
   // ---------- Init ----------
+  const versionEl = document.getElementById('app-version');
+  if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
   loadTasks();
   schoolTerms = sanitizeTerms(readJSON(TERMS_KEY, []));
   historyLog = sanitizeHistory(readJSON(HISTORY_KEY, []));
