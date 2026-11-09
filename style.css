@@ -709,6 +709,25 @@ body {
 .trash-text { font-size: 14px; color: var(--color-text); overflow-wrap: anywhere; }
 .trash-meta { font-size: 12px; color: var(--color-text-faint); }
 
+/* School term chip */
+.term-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.term-chip:hover { border-color: var(--color-primary); }
+.term-chip.holiday { color: var(--color-text-muted); }
+
 /* In-app dialog */
 .app-dialog {
   width: min(440px, calc(100% - 32px));
@@ -728,6 +747,8 @@ body {
 .app-dialog-message:empty { display: none; }
 .app-dialog-fields { display: flex; flex-direction: column; gap: 12px; }
 .app-dialog-fields:empty { display: none; }
+.app-dialog-heading { margin: 6px 0 -4px; font-size: 13px; font-weight: 700; color: var(--color-primary); }
+.app-dialog-heading:first-child { margin-top: 0; }
 .app-dialog-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 500; color: var(--color-text-muted); }
 .app-dialog-field input,
 .app-dialog-field select {

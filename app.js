@@ -87,6 +87,13 @@
     const rows = {};
 
     fields.forEach(f => {
+      if (f.type === 'heading') {
+        const h = document.createElement('h3');
+        h.className = 'app-dialog-heading';
+        h.textContent = f.label;
+        fieldsBox.appendChild(h);
+        return;
+      }
       const label = document.createElement('label');
       label.className = 'app-dialog-field';
       const caption = document.createElement('span');
@@ -151,6 +158,7 @@
         e.preventDefault();
         for (const f of fields) {
           const input = inputs[f.name];
+          if (!input) continue;
           if (f.required && !input.value.trim()) {
             input.setAttribute('aria-invalid', 'true');
             input.focus();
@@ -170,9 +178,10 @@
 
       dlg.showModal();
       // Focus the first field; for destructive confirmations focus Cancel
-      const first = fields.length ? inputs[fields[0].name] : (danger && cancel ? cancelBtn : okBtn);
+      const firstField = fields.find(f => inputs[f.name]);
+      const first = firstField ? inputs[firstField.name] : (danger && cancel ? cancelBtn : okBtn);
       first.focus();
-      if (first.select && fields.length && !fields[0].readonly && first.type === 'text') first.select();
+      if (firstField && first.select && !firstField.readonly && first.type === 'text') first.select();
     });
   }
 
@@ -420,8 +429,52 @@
     } catch (e) { /* storage full: the task list warning covers this */ }
   }
 
+  // ---------- School terms ----------
+  // Up to three terms: { start, end, breakStart, breakEnd } ("YYYY-MM-DD"; break optional).
+  // With terms set, holidays and mid-term breaks are not recorded in history.
+  const TERMS_KEY = 'eduplanner_terms';
+  const TERM_NAMES = ['term1', 'term2', 'term3'];
+
+  function sanitizeTerms(list) {
+    if (!Array.isArray(list)) return [];
+    const ok = (d) => typeof d === 'string' && DATE_RE.test(d);
+    return list.slice(0, 3).map(t => {
+      if (!t || !ok(t.start) || !ok(t.end)) return null;
+      let [start, end] = t.start <= t.end ? [t.start, t.end] : [t.end, t.start];
+      const term = { start, end };
+      if (ok(t.breakStart) && ok(t.breakEnd)) {
+        const [bs, be] = t.breakStart <= t.breakEnd ? [t.breakStart, t.breakEnd] : [t.breakEnd, t.breakStart];
+        if (bs >= start && be <= end) { term.breakStart = bs; term.breakEnd = be; }
+      }
+      return term;
+    });
+  }
+
+  let schoolTerms = []; // loaded at init; entries may be null for unset terms
+
+  function termsSet() {
+    return schoolTerms.some(Boolean);
+  }
+
+  // Index of the term containing the date, or -1
+  function termIndexFor(date) {
+    return schoolTerms.findIndex(t => t && date >= t.start && date <= t.end);
+  }
+
+  function inBreak(term, date) {
+    return !!(term && term.breakStart && date >= term.breakStart && date <= term.breakEnd);
+  }
+
+  // Without terms every day counts; with terms, holidays and breaks don't
+  function isSchoolDay(date) {
+    if (!termsSet()) return true;
+    const i = termIndexFor(date);
+    return i > -1 && !inBreak(schoolTerms[i], date);
+  }
+
   // Snapshot the given frequencies for the period that just ended
   function recordHistory(freqs, lastOpened) {
+    if (!isSchoolDay(lastOpened.daily)) return; // holiday or mid-term break
     for (const role in tasks) {
       for (const freq of freqs) {
         const list = (tasks[role] || []).filter(t => t.freq === freq);
@@ -530,6 +583,7 @@
     checkRecurringResets();
     updateAnalytics();
     renderTasks();
+    renderTermChip();
   });
 
   function getWeekYearString(date) {
@@ -1385,6 +1439,7 @@
         }
         const backupNotes = isV2 && typeof raw.notes === 'string' ? raw.notes.slice(0, 100000) : null;
         const backupHistory = isV2 && Array.isArray(raw.history) ? sanitizeHistory(raw.history) : null;
+        const backupTerms = isV2 && Array.isArray(raw.terms) ? sanitizeTerms(raw.terms) : null;
 
         const count = Object.values(importedTasks).reduce((n, list) => n + list.length, 0);
         const ok = await askConfirm({
@@ -1414,6 +1469,7 @@
             historyLog = backupHistory;
             saveHistory();
           }
+          if (backupTerms) saveTerms(backupTerms);
           saveTasks();
           updateAnalytics();
           renderTasks();
@@ -1456,6 +1512,7 @@
     }
     renderTasks();
     renderTrash();
+    renderTermChip();
   }
 
   const langSelect = $('#lang-select');
@@ -1893,7 +1950,8 @@
       tasks,
       customRoles,
       notes,
-      history: historyLog
+      history: historyLog,
+      terms: schoolTerms
     };
   }
 
@@ -2082,6 +2140,85 @@
     });
   }
 
+  // ---------- School terms: chip and settings ----------
+  function saveTerms(list) {
+    schoolTerms = sanitizeTerms(list);
+    try {
+      localStorage.setItem(TERMS_KEY, JSON.stringify(schoolTerms));
+    } catch (e) { /* storage full or blocked */ }
+    renderTermChip();
+  }
+
+  // The term containing today, else the most recent one that has started
+  function currentOrLastTerm(today) {
+    const i = termIndexFor(today);
+    if (i > -1) return schoolTerms[i];
+    return schoolTerms.filter(t => t && t.start <= today).sort((a, b) => b.start.localeCompare(a.start))[0] || null;
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / DAY_MS);
+  }
+
+  function renderTermChip() {
+    const chip = document.getElementById('term-chip');
+    if (!chip) return;
+    const label = document.getElementById('term-chip-text');
+    const today = localDateStr(new Date());
+    chip.classList.remove('holiday');
+    if (!termsSet()) {
+      label.textContent = tr('setTerms');
+      chip.title = tr('schoolTerms');
+      return;
+    }
+    chip.title = tr('historyPaused');
+    const i = termIndexFor(today);
+    if (i > -1) {
+      const t = schoolTerms[i];
+      const name = tr(TERM_NAMES[i]);
+      if (inBreak(t, today)) {
+        label.textContent = tr('midTermBreak', { term: name });
+        chip.classList.add('holiday');
+      } else {
+        const week = Math.floor(daysBetween(t.start, today) / 7) + 1;
+        const total = Math.ceil((daysBetween(t.start, t.end) + 1) / 7);
+        label.textContent = tr('termWeek', { term: name, week, total });
+      }
+      return;
+    }
+    chip.classList.add('holiday');
+    const nextIdx = schoolTerms
+      .map((t, idx) => (t && t.start > today ? idx : -1))
+      .filter(idx => idx > -1)
+      .sort((a, b) => schoolTerms[a].start.localeCompare(schoolTerms[b].start))[0];
+    label.textContent = nextIdx !== undefined
+      ? tr('holidayNext', { term: tr(TERM_NAMES[nextIdx]), date: formatDate(schoolTerms[nextIdx].start) })
+      : tr('holiday');
+  }
+
+  async function openTermsDialog() {
+    const fields = [];
+    TERM_NAMES.forEach((key, i) => {
+      const t = schoolTerms[i] || {};
+      fields.push(
+        { type: 'heading', label: tr(key) },
+        { name: `start${i}`, label: tr('termStarts'), type: 'date', value: t.start || '', row: `a${i}` },
+        { name: `end${i}`, label: tr('termEnds'), type: 'date', value: t.end || '', row: `a${i}` },
+        { name: `bstart${i}`, label: tr('breakStarts'), type: 'date', value: t.breakStart || '', row: `b${i}` },
+        { name: `bend${i}`, label: tr('breakEnds'), type: 'date', value: t.breakEnd || '', row: `b${i}` }
+      );
+    });
+    const r = await openDialog({ title: tr('schoolTerms'), message: tr('schoolTermsHint'), okLabel: tr('save'), fields });
+    if (!r) return;
+    saveTerms(TERM_NAMES.map((_, i) => ({
+      start: r[`start${i}`], end: r[`end${i}`], breakStart: r[`bstart${i}`], breakEnd: r[`bend${i}`]
+    })));
+    showToast(tr('termsSaved'));
+  }
+
+  const termChip = document.getElementById('term-chip');
+  if (termChip) termChip.addEventListener('click', () => openTermsDialog());
+
   // ---------- Term report ----------
   const REPORT_INFO_KEY = 'eduplanner_report_info';
 
@@ -2102,7 +2239,7 @@
   // Periods still in progress (today, this week, this month) are left out:
   // counting them would mark tasks not yet due as missed.
   function collectReport(role, from, to) {
-    const records = historyLog.filter(r => r.role === role && r.date >= from && r.date <= to);
+    const records = historyLog.filter(r => r.role === role && r.date >= from && r.date <= to && isSchoolDay(r.date));
 
     const summary = {};
     FREQS.forEach(f => { summary[f] = { periods: 0, done: 0, total: 0 }; });
@@ -2200,7 +2337,7 @@
       <div class="brand-sub">${info.school ? e(info.school) : 'Harmony Digital Consults Ltd'}</div>
     </div>
     <div class="meta">
-      <h1>${e(tr('reportTitle'))}</h1>
+      <h1>${e(tr('reportTitle'))}${info.termName ? ' · ' + e(info.termName) : ''}</h1>
       ${info.staff ? `<div>${e(tr('reportStaff'))} <b>${e(info.staff)}</b></div>` : ''}
       <div>${e(tr('roleLabel'))} <b>${e(roleLabel(info.role))}</b></div>
       <div>${e(tr('reportPeriod'))} ${e(longDate(info.from))} – ${e(longDate(info.to))}</div>
@@ -2244,7 +2381,14 @@
   async function openTermReport() {
     const saved = readJSON(REPORT_INFO_KEY, {}) || {};
     const today = localDateStr(new Date());
-    const from = localDateStr(new Date(Date.now() - 91 * DAY_MS)); // about one term
+    // Default to the current term, or the most recent one; otherwise about one term back
+    let from = localDateStr(new Date(Date.now() - 91 * DAY_MS));
+    let to = today;
+    const term = currentOrLastTerm(today);
+    if (term) {
+      from = term.start;
+      to = term.end;
+    }
     const r = await openDialog({
       title: tr('termReportTitle'),
       message: tr('termReportHint'),
@@ -2255,12 +2399,15 @@
         { name: 'role', label: tr('roleLabel').replace(/\s*:\s*$/, ''), type: 'select', value: currentRole,
           options: allRoleKeys().map(k => ({ value: k, label: roleLabel(k) })) },
         { name: 'from', label: tr('fromDate'), type: 'date', value: from, required: true, row: 1 },
-        { name: 'to', label: tr('toDate'), type: 'date', value: today, required: true, row: 1 }
+        { name: 'to', label: tr('toDate'), type: 'date', value: to, required: true, row: 1 }
       ]
     });
     if (!r) return;
 
     const info = { staff: r.staff.trim(), school: r.school.trim(), role: r.role, from: r.from, to: r.to };
+    // Name the term when the dates match one exactly
+    const match = schoolTerms.findIndex(t => t && t.start === info.from && t.end === info.to);
+    info.termName = match > -1 ? tr(TERM_NAMES[match]) : '';
     if (!DATE_RE.test(info.from) || !DATE_RE.test(info.to)) return;
     if (info.from > info.to) [info.from, info.to] = [info.to, info.from];
     try {
@@ -2287,6 +2434,7 @@
 
   // ---------- Init ----------
   loadTasks();
+  schoolTerms = sanitizeTerms(readJSON(TERMS_KEY, []));
   historyLog = sanitizeHistory(readJSON(HISTORY_KEY, []));
   checkRecurringResets();
   saveArchive(); // writes back the pruned archive
