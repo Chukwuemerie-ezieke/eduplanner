@@ -37,12 +37,15 @@ EduPlanner gives every school role a ready-to-use task module with pre-populated
 ### All Tasks View — ICT Coordinator
 <img src="screenshots/all-tasks.png" alt="EduPlanner showing all tasks with frequency badges" width="100%">
 
+### Term Report — printable, with signature lines
+<img src="screenshots/term-report.png" alt="Printable term report with summary, week-by-week progress, completion per task and signature lines" width="100%">
+
 <details>
-<summary><strong>📱 Mobile Views</strong></summary>
+<summary><strong>📱 Mobile Views (light, and dark in French)</strong></summary>
 
 <div align="center">
-<img src="screenshots/mobile.png" alt="EduPlanner mobile light mode" width="320">&nbsp;&nbsp;&nbsp;
-<img src="screenshots/mobile-dark.png" alt="EduPlanner mobile dark mode" width="320">
+<img src="screenshots/mobile.png" alt="EduPlanner on a phone in light mode" width="320">&nbsp;&nbsp;&nbsp;
+<img src="screenshots/mobile-dark.png" alt="EduPlanner on a phone in dark mode, in French" width="320">
 </div>
 
 </details>
@@ -136,13 +139,18 @@ eduplanner/
 ├── style.css           # All styles (light + dark mode)
 ├── app.js              # App logic, task management, exports
 ├── i18n.js             # Translations (English, French, Nigerian Pidgin)
-├── sw.js               # Service worker for offline support (bump CACHE_VERSION on release)
+├── default-tasks.js    # Built-in tasks for each role (English)
+├── dialog.js           # In-app dialog (replaces browser pop-ups)
+├── report.js           # Printable term report layout
+├── sw.js               # Service worker for offline support
+├── CHANGELOG.md        # What changed in each release
 ├── analytics.js        # Optional, privacy-filtered analytics
 ├── config.js           # Analytics settings
 ├── manifest.json       # PWA manifest
 ├── package.json        # Dev-only: smoke test runner
 ├── tests/
-│   └── smoke.test.js   # Browser smoke tests (Playwright)
+│   ├── smoke.test.js   # Browser smoke tests (Playwright)
+│   └── screenshots.js  # Regenerates the README screenshots
 ├── LICENSE             # MIT License
 ├── CNAME               # Custom domain config
 ├── icons/
@@ -169,7 +177,7 @@ npm test
 
 They load the app in Chromium and check that tasks render, tasks and subtasks can be added, shared links and backups are validated, custom roles work, and the app runs offline. GitHub Actions runs them on every pull request.
 
-**Releasing:** bump `CACHE_VERSION` in `sw.js` whenever you deploy, so installed copies drop their old cache.
+**Releasing:** bump `APP_VERSION` in both `app.js` and `sw.js` (a test fails if they differ), and add an entry to `CHANGELOG.md`. The new version clears installed copies' old cache. To refresh the README screenshots, run `npm run screenshots`.
 
 ---
 

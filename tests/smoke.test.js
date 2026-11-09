@@ -34,6 +34,34 @@ const DAY_MS = 86400000;
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
 
+// ---------- Checks without a browser ----------
+test('app.js and sw.js have the same APP_VERSION, listed in CHANGELOG.md', async () => {
+  const version = (file) => (fs.readFileSync(path.join(ROOT, file), 'utf8').match(/APP_VERSION = '([^']+)'/) || [])[1];
+  assert.ok(version('app.js'), 'APP_VERSION found in app.js');
+  assert.strictEqual(version('sw.js'), version('app.js'), 'sw.js APP_VERSION matches app.js');
+  assert.ok(fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8').includes('## ' + version('app.js')), 'CHANGELOG has this version');
+});
+
+test('every built-in task and UI string is translated', async () => {
+  const sandbox = { window: {} };
+  const load = (file) => new Function('window', fs.readFileSync(path.join(ROOT, file), 'utf8'))(sandbox.window);
+  load('i18n.js');
+  load('default-tasks.js');
+  const { ui, tasks } = sandbox.window.EDU_I18N;
+  const missing = [];
+  for (const role of Object.values(sandbox.window.EDU_DEFAULT_TASKS)) {
+    for (const list of Object.values(role)) {
+      for (const text of list) {
+        for (const lang of ['fr', 'pidgin']) if (!(tasks[text] && tasks[text][lang])) missing.push(lang + ': ' + text);
+      }
+    }
+  }
+  for (const lang of ['fr', 'pidgin']) {
+    for (const key of Object.keys(ui.en)) if (!ui[lang][key]) missing.push(lang + ' ui: ' + key);
+  }
+  assert.deepStrictEqual(missing, []);
+});
+
 // Opens the app in a fresh context. External hosts (CDNs, analytics) are
 // blocked so the tests are fast and deterministic.
 async function openApp(browser, base, { query = '', initScript, serviceWorkers = 'block' } = {}, initArg) {
@@ -159,6 +187,23 @@ test('fits a phone screen without sideways scrolling', async (browser, base) => 
   await page.waitForSelector('#task-list .task-item');
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(width <= 390, 'page is ' + width + 'px wide on a 390px phone');
+  await context.close();
+});
+
+test('Quick Notes: opens from the keyboard and is a small button on phones', async (browser, base) => {
+  const { context, page, errors } = await openApp(browser, base);
+  await page.focus('#scratchpad-header');
+  await page.keyboard.press('Enter');
+  assert.ok(await page.locator('#scratchpad-textarea').isVisible(), 'opened with Enter');
+  assert.strictEqual(await page.getAttribute('#scratchpad-header', 'aria-expanded'), 'true');
+  await page.keyboard.type('Buy chalk');
+  await page.reload();
+  await page.waitForSelector('#task-list .task-item');
+  assert.strictEqual(await page.inputValue('#scratchpad-textarea'), 'Buy chalk', 'notes saved');
+  await page.setViewportSize({ width: 375, height: 812 });
+  const box = await page.locator('#scratchpad-container').boundingBox();
+  assert.ok(box.width <= 50 && box.height <= 50, 'compact on phones: ' + JSON.stringify(box));
+  assert.deepStrictEqual(errors, []);
   await context.close();
 });
 

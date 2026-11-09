@@ -241,7 +241,7 @@
       usageOff: 'Usage stats: Off',
 
       // Quick notes
-      quickNotes: '📝 Quick Notes',
+      quickNotes: 'Quick Notes',
       quickNotesLabel: 'Quick notes',
       notesPlaceholder: 'Jot down quick thoughts here...',
 
@@ -462,7 +462,7 @@
       usageOn: "Statistiques d'utilisation : activées",
       usageOff: "Statistiques d'utilisation : désactivées",
 
-      quickNotes: '📝 Notes rapides',
+      quickNotes: 'Notes rapides',
       quickNotesLabel: 'Notes rapides',
       notesPlaceholder: 'Notez vos idées ici...',
 
@@ -682,7 +682,7 @@
       usageOn: 'Usage stats: On',
       usageOff: 'Usage stats: Off',
 
-      quickNotes: '📝 Quick Notes',
+      quickNotes: 'Quick Notes',
       quickNotesLabel: 'Quick notes',
       notesPlaceholder: 'Write anything wey dey your mind...',
 
